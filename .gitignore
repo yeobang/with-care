@@ -1,0 +1,15 @@
+# python
+api/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+api/.env
+
+# node / expo
+node_modules/
+.expo/
+dist/
+app/.env
+
+# misc
+.DS_Store
