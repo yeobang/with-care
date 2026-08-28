@@ -215,3 +215,16 @@ class CareSession(Base):
     handoff_started_at: Mapped[datetime | None] = mapped_column(default=None)
     handoff_ended_at: Mapped[datetime | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class SessionPhoto(Base):
+    """세션 사진 (I6: 크루 밖으로 나가지 않는다 — 조회는 멤버십 검증 + 시한부 서명 URL로만)."""
+
+    __tablename__ = "session_photos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    session_id: Mapped[str] = mapped_column(ForeignKey("care_sessions.id"))
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    storage_path: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(default=_now)

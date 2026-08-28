@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.domain import errors
 from app.domain.crew_service import _require_member
+from app.domain.models import Consent
 from app.domain.models import (
     Assignment,
     AssignmentChild,
@@ -34,6 +35,7 @@ def add_slot(
 ) -> BoardSlot:
     _require_member(db, crew_id, user.id)
     _require_active(db, crew_id)
+    _require_consent(db, crew_id, user.id)
     if not (0 <= start_hour < end_hour <= 24):
         raise ValueError("시간 범위가 올바르지 않다")
     if kind == SlotKind.NEED and child_id is None:
@@ -98,6 +100,7 @@ def confirm_assignment(db: DbSession, assignment_id: str, guardian: User) -> Car
     if assignment is None:
         raise ValueError("존재하지 않는 배정 후보")
     _require_member(db, assignment.crew_id, guardian.id)
+    _require_consent(db, assignment.crew_id, guardian.id)
 
     rows = db.scalars(
         select(AssignmentChild).where(AssignmentChild.assignment_id == assignment_id)
@@ -128,6 +131,15 @@ def confirm_assignment(db: DbSession, assignment_id: str, guardian: User) -> Car
 
 
 # --- 내부 가드 ---
+
+def _require_consent(db: DbSession, crew_id: str, user_id: str) -> None:
+    """I2: 활성화 이후에 합류한 멤버도 합의 없이는 보드에 참여할 수 없다."""
+    consent = db.scalar(
+        select(Consent).where(Consent.crew_id == crew_id, Consent.user_id == user_id)
+    )
+    if consent is None or not consent.is_complete:
+        raise errors.ConsentMissing("포괄 합의 없이는 크루 활동에 참여할 수 없다 (I2)")
+
 
 def _require_active(db: DbSession, crew_id: str) -> None:
     crew = db.get(Crew, crew_id)

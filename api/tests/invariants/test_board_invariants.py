@@ -134,3 +134,16 @@ def test_i3_elementary_children_not_counted(db, crew_with_families):
     [proposal] = board.propose_assignments(db, crew_id, users[0], DATE)
     session = _confirm_all(db, proposal, [u for u, _ in kids])
     assert session is not None
+
+
+def test_i2_late_joiner_without_consent_blocked(db, crew_with_families, verified_user):
+    """활성화된 크루에 나중에 합류한 멤버도 합의 없이는 보드 참여 불가 (I2 사후 강제)."""
+    from app.domain.errors import ConsentMissing
+
+    build, child = crew_with_families
+    crew_id, users = build(2)
+    late = verified_user("늦게합류")
+    invite = svc.create_invite(db, crew_id, users[0])
+    svc.join_crew(db, late, invite.token)  # 합의 없이 합류만
+    with pytest.raises(ConsentMissing):
+        board.add_slot(db, crew_id, late, kind=SlotKind.AVAILABLE, date=DATE, start_hour=14, end_hour=16)

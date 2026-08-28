@@ -1,9 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { api, Assignment, CareSession, Child, Slot } from "../api";
+import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { api, Assignment, CareSession, Child, Slot, uploadSessionPhoto } from "../api";
 import { ui } from "../ui";
+
+interface Photo {
+  id: string;
+  url: string;
+}
 
 const HOURS = [13, 14, 15, 16, 17, 18, 19];
 
@@ -21,6 +27,7 @@ export default function BoardScreen({ route }: any) {
   const [children, setChildren] = useState<Child[]>([]);
   const [proposals, setProposals] = useState<Assignment[]>([]);
   const [sessions, setSessions] = useState<CareSession[]>([]);
+  const [photos, setPhotos] = useState<Record<string, Photo[]>>({});
   const [mode, setMode] = useState<"available" | "need">("available");
 
   useEffect(() => {
@@ -30,7 +37,16 @@ export default function BoardScreen({ route }: any) {
   const load = useCallback(() => {
     api.get<Slot[]>(`/crews/${crewId}/board?date=${date}`).then(setSlots).catch(() => {});
     api.get<Assignment[]>(`/crews/${crewId}/proposals?date=${date}`).then(setProposals).catch(() => {});
-    api.get<CareSession[]>(`/crews/${crewId}/sessions`).then(setSessions).catch(() => {});
+    api
+      .get<CareSession[]>(`/crews/${crewId}/sessions`)
+      .then(async (list) => {
+        setSessions(list);
+        const entries = await Promise.all(
+          list.map(async (s) => [s.id, await api.get<Photo[]>(`/sessions/${s.id}/photos`).catch(() => [])] as const),
+        );
+        setPhotos(Object.fromEntries(entries));
+      })
+      .catch(() => {});
     api.get<Child[]>("/my/children").then(setChildren).catch(() => {});
   }, [crewId, date]);
   useFocusEffect(load);
@@ -56,6 +72,13 @@ export default function BoardScreen({ route }: any) {
         end_hour: hour + 1,
         child_id: mode === "need" ? children[0].id : null,
       });
+    })();
+
+  const pickPhoto = (sessionId: string) =>
+    guard(async () => {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: "images", quality: 0.7 });
+      if (result.canceled) return;
+      await uploadSessionPhoto(sessionId, result.assets[0].uri);
     })();
 
   const mySlots = slots.filter((s) => s.user_id === myId);
@@ -146,6 +169,18 @@ export default function BoardScreen({ route }: any) {
                 <Text style={ui.smallBtnText}>돌려받음 확인</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={ui.smallBtn} onPress={() => pickPhoto(s.id)}>
+              <Text style={ui.smallBtnText}>📷 사진 올리기</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={ui.row}>
+            {(photos[s.id] ?? []).map((p) => (
+              <Image
+                key={p.id}
+                source={{ uri: p.url }}
+                style={{ width: 72, height: 72, borderRadius: 8, marginRight: 6, marginTop: 6 }}
+              />
+            ))}
           </View>
         </View>
       ))}

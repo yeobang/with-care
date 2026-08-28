@@ -113,3 +113,55 @@ def test_full_week_flow(client):
     outsider = client.post("/users", json={"name": "외부인"}).json()["id"]
     res = client.get(f"/crews/{crew_id}/sessions", headers=_h(outsider))
     assert res.status_code == 403 and res.json()["invariant"] == "I6"
+
+
+def test_session_photos_flow(client, monkeypatch):
+    """사진 업로드/조회 + I6: 크루 밖 사용자 차단. 스토리지는 모킹."""
+    uploaded = {}
+    monkeypatch.setattr("app.infra.storage.upload", lambda path, content, ct: uploaded.update({path: content}))
+    monkeypatch.setattr("app.infra.storage.signed_url", lambda path: f"https://signed.example/{path}")
+
+    # 최소 흐름으로 세션 하나 생성
+    users = [client.post("/users", json={"name": f"u{i}"}).json()["id"] for i in range(2)]
+    owner, mom = users
+    crew_id = client.post("/crews", json={"name": "포토크루"}, headers=_h(owner)).json()["id"]
+    token = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
+    client.post(f"/invites/{token}/join", headers=_h(mom))
+    for uid in users:
+        client.post(
+            f"/crews/{crew_id}/consent",
+            json={"liability_ack": True, "photo_consent": True, "guardian_consent": True},
+            headers=_h(uid),
+        )
+    client.post(f"/crews/{crew_id}/charter/confirm", json={}, headers=_h(owner))
+    client.post(f"/crews/{crew_id}/activate", headers=_h(owner))
+    kid = client.post(
+        "/my/children",
+        json={"name": "아이", "birth_year_month": "2022-05", "emergency_contact": "010"},
+        headers=_h(mom),
+    ).json()["id"]
+    date = "2026-09-07"
+    client.post(f"/crews/{crew_id}/slots", json={"kind": "available", "date": date, "start_hour": 14, "end_hour": 18}, headers=_h(owner))
+    client.post(f"/crews/{crew_id}/slots", json={"kind": "need", "date": date, "start_hour": 15, "end_hour": 17, "child_id": kid}, headers=_h(mom))
+    [proposal] = client.post(f"/crews/{crew_id}/propose?date={date}", headers=_h(owner)).json()
+    session_id = client.post(f"/assignments/{proposal['id']}/confirm", headers=_h(mom)).json()["session_id"]
+
+    # 업로드 (돌봄자) → 조회 (맡긴 부모)
+    res = client.post(
+        f"/sessions/{session_id}/photos",
+        files={"file": ("photo.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+        headers=_h(owner),
+    )
+    assert res.status_code == 200
+    photos = client.get(f"/sessions/{session_id}/photos", headers=_h(mom)).json()
+    assert len(photos) == 1 and photos[0]["url"].startswith("https://signed.example/")
+    assert len(uploaded) == 1
+
+    # I6: 외부인은 업로드도 조회도 불가
+    outsider = client.post("/users", json={"name": "외부인"}).json()["id"]
+    assert client.get(f"/sessions/{session_id}/photos", headers=_h(outsider)).status_code == 403
+    assert client.post(
+        f"/sessions/{session_id}/photos",
+        files={"file": ("x.jpg", b"z", "image/jpeg")},
+        headers=_h(outsider),
+    ).status_code == 403
