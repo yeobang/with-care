@@ -27,3 +27,15 @@ class CharterIncomplete(InvariantViolation):
     """I7: 규약 없는 크루는 활성화되지 않는다."""
 
     invariant = "I7"
+
+
+class UnlicensedCarePattern(InvariantViolation):
+    """I3: 무인가 보육 패턴 금지 — 돌봄자 1인 + 타인 영유아 5인 이상."""
+
+    invariant = "I3"
+
+
+class HumanChoiceViolation(InvariantViolation):
+    """I4: 고르기는 사람 — 배정 확정은 각 가정의 명시적 탭으로만."""
+
+    invariant = "I4"

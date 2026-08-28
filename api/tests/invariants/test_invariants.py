@@ -125,36 +125,23 @@ def test_i8_no_age_branching_in_domain_source():
     """도메인 소스에 연령 조건 분기가 없어야 한다.
 
     허용 예외(가드레일 §2): 0~2세 보류 플래그, I3의 영유아 카운트.
-    예외를 추가하려면 이 테스트의 ALLOWED에 근거 주석과 함께 등록해야 한다 — 그게 리뷰 지점.
+    예외 라인에는 `# I8-allow: <근거>` 마커를 붙인다 — 마커가 곧 리뷰 지점.
     """
     import pathlib
     import re
 
     domain_dir = pathlib.Path(__file__).parents[2] / "app" / "domain"
-    ALLOWED: set[str] = set()  # 예: "session_service.py:42  # I3 영유아 카운트"
     pattern = re.compile(r"\b(age|나이|개월수)\b.*(if|<|>|==)|"
                          r"(if|<|>|==).*\b(age|나이|개월수)\b")
     violations = []
     for f in domain_dir.glob("*.py"):
         for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
-            if pattern.search(line) and f"{f.name}:{i}" not in ALLOWED:
+            if pattern.search(line) and "I8-allow" not in line:
                 violations.append(f"{f.name}:{i}: {line.strip()}")
     assert not violations, f"연령 분기 발견 (I8): {violations}"
 
 
-# --- 구현 단계 미도달 (P2·P4에서 전환) ---
-
-@PENDING
-def test_i3_unlicensed_care_pattern_blocked():
-    """I3: 돌봄자 1인 + 타인 영유아 5인 이상 세션 생성 불가. (P2)"""
-    raise NotImplementedError
-
-
-@PENDING
-def test_i4_humans_choose():
-    """I4: 배정·시터 선택은 복수 후보 중 명시적 확정 탭. (P2)"""
-    raise NotImplementedError
-
+# --- 구현 단계 미도달 (P4에서 전환) ---
 
 @PENDING
 def test_i5_no_money_in_neighbor_track():

@@ -139,3 +139,79 @@ class Consent(Base):
             and self.photo_consent
             and self.guardian_consent
         )
+
+
+# --- P2: 주간 보드 ---
+
+
+class SlotKind(enum.StrEnum):
+    AVAILABLE = "available"  # 이 시간에 내가 돌봄 가능
+    NEED = "need"            # 이 시간에 우리 아이 돌봄 필요
+
+
+class BoardSlot(Base):
+    """주간 조율 보드의 한 칸: 각 부모가 탭으로 입력 (§11 — 채팅이 아니라 구조화 입력)."""
+
+    __tablename__ = "board_slots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[SlotKind] = mapped_column(String(10))
+    date: Mapped[str] = mapped_column(String(10))       # "2026-09-01"
+    start_hour: Mapped[int] = mapped_column()            # 0~23
+    end_hour: Mapped[int] = mapped_column()
+    child_id: Mapped[str | None] = mapped_column(ForeignKey("children.id"), default=None)  # NEED일 때
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class ProposalStatus(enum.StrEnum):
+    PROPOSED = "proposed"    # 앱이 후보로 나열함 — 아직 아무 효력 없음 (I4)
+    CONFIRMED = "confirmed"  # 관련 가정 전원이 확정 탭
+    DECLINED = "declined"
+
+
+class Assignment(Base):
+    """배정 후보. 앱은 후보를 '나열'만 하고, 효력은 전원 확정 탭에서만 생긴다 (I4)."""
+
+    __tablename__ = "assignments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    caregiver_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    date: Mapped[str] = mapped_column(String(10))
+    start_hour: Mapped[int] = mapped_column()
+    end_hour: Mapped[int] = mapped_column()
+    status: Mapped[ProposalStatus] = mapped_column(String(10), default=ProposalStatus.PROPOSED)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+    children: Mapped[list["AssignmentChild"]] = relationship(back_populates="assignment")
+
+
+class AssignmentChild(Base):
+    __tablename__ = "assignment_children"
+    __table_args__ = (UniqueConstraint("assignment_id", "child_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    assignment_id: Mapped[str] = mapped_column(ForeignKey("assignments.id"))
+    child_id: Mapped[str] = mapped_column(ForeignKey("children.id"))
+    guardian_confirmed: Mapped[bool] = mapped_column(default=False)  # I4: 가정별 명시적 확정 탭
+
+    assignment: Mapped[Assignment] = relationship(back_populates="children")
+
+
+class CareSession(Base):
+    """확정된 돌봄 세션. Assignment 전원 확정 시에만 생성된다."""
+
+    __tablename__ = "care_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    assignment_id: Mapped[str] = mapped_column(ForeignKey("assignments.id"), unique=True)
+    caregiver_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    date: Mapped[str] = mapped_column(String(10))
+    start_hour: Mapped[int] = mapped_column()
+    end_hour: Mapped[int] = mapped_column()
+    handoff_started_at: Mapped[datetime | None] = mapped_column(default=None)
+    handoff_ended_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
