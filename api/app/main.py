@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.domain.errors import InvariantViolation
-from app.routers import board, crews, health, photos, users
+from app.routers import board, crews, health, ledger, photos, users
 
 app = FastAPI(
     title="with-care API",
@@ -22,6 +22,7 @@ app.include_router(users.router)
 app.include_router(crews.router)
 app.include_router(board.router)
 app.include_router(photos.router)
+app.include_router(ledger.router)
 
 
 @app.exception_handler(InvariantViolation)

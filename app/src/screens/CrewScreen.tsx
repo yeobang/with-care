@@ -97,12 +97,20 @@ export default function CrewScreen({ route, navigation }: any) {
       )}
 
       {crew.status === "active" && (
-        <TouchableOpacity
-          style={ui.primaryBtn}
-          onPress={() => navigation.navigate("Board", { crewId, name: crew.name })}
-        >
-          <Text style={ui.primaryBtnText}>주간 보드 열기</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={ui.primaryBtn}
+            onPress={() => navigation.navigate("Board", { crewId, name: crew.name })}
+          >
+            <Text style={ui.primaryBtnText}>주간 보드 열기</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={ui.primaryBtn}
+            onPress={() => navigation.navigate("Ledger", { crewId, name: crew.name })}
+          >
+            <Text style={ui.primaryBtnText}>장부·정산 열기</Text>
+          </TouchableOpacity>
+        </>
       )}
     </ScrollView>
   );

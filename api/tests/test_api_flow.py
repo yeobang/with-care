@@ -165,3 +165,69 @@ def test_session_photos_flow(client, monkeypatch):
         files={"file": ("x.jpg", b"z", "image/jpeg")},
         headers=_h(outsider),
     ).status_code == 403
+
+
+def test_ledger_and_settlement_flow(client):
+    """세션 종료 → 장부 기입(아이·시간 제로섬) → 월말 정산 계산 → 받았어요 확인."""
+    users = [client.post("/users", json={"name": f"L{i}"}).json()["id"] for i in range(3)]
+    owner, mom_b, mom_c = users
+    crew_id = client.post("/crews", json={"name": "장부크루"}, headers=_h(owner)).json()["id"]
+    for uid in (mom_b, mom_c):
+        token = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
+        client.post(f"/invites/{token}/join", headers=_h(uid))
+    for uid in users:
+        client.post(
+            f"/crews/{crew_id}/consent",
+            json={"liability_ack": True, "photo_consent": True, "guardian_consent": True},
+            headers=_h(uid),
+        )
+    # 정산 모드 credit + 단가 10000원
+    client.post(
+        f"/crews/{crew_id}/charter/confirm",
+        json={"settlement_mode": "credit", "credit_price_krw": 10000},
+        headers=_h(owner),
+    )
+    client.post(f"/crews/{crew_id}/activate", headers=_h(owner))
+
+    kids = {}
+    for uid in (mom_b, mom_c):
+        kids[uid] = client.post(
+            "/my/children",
+            json={"name": "아이", "birth_year_month": "2022-05", "emergency_contact": "010"},
+            headers=_h(uid),
+        ).json()["id"]
+    date = "2026-08-03"  # 8월 세션
+    client.post(f"/crews/{crew_id}/slots", json={"kind": "available", "date": date, "start_hour": 15, "end_hour": 17}, headers=_h(owner))
+    for uid in (mom_b, mom_c):
+        client.post(f"/crews/{crew_id}/slots", json={"kind": "need", "date": date, "start_hour": 15, "end_hour": 17, "child_id": kids[uid]}, headers=_h(uid))
+    [proposal] = client.post(f"/crews/{crew_id}/propose?date={date}", headers=_h(owner)).json()
+    client.post(f"/assignments/{proposal['id']}/confirm", headers=_h(mom_b))
+    session_id = client.post(f"/assignments/{proposal['id']}/confirm", headers=_h(mom_c)).json()["session_id"]
+
+    # 인계 종료 전에는 장부가 비어 있다
+    assert client.get(f"/crews/{crew_id}/ledger", headers=_h(owner)).json() == {}
+    client.post(f"/sessions/{session_id}/handoff/start", headers=_h(mom_b))
+    client.post(f"/sessions/{session_id}/handoff/end", headers=_h(mom_b))
+
+    # 아이·시간 제로섬: 오너 +4 (아이2×2h), B·C 각 -2
+    bal = client.get(f"/crews/{crew_id}/ledger", headers=_h(owner)).json()
+    assert bal[owner] == 4 and bal[mom_b] == -2 and bal[mom_c] == -2
+    assert sum(bal.values()) == 0
+
+    # 월말 정산: B→오너 20000원, C→오너 20000원 (2크레딧×10000)
+    rows = client.post(f"/crews/{crew_id}/settlements/2026-08/compute", headers=_h(owner)).json()
+    assert len(rows) == 2
+    assert all(r["to_user"] == owner and r["amount_krw"] == 20000 for r in rows)
+    # 멱등
+    again = client.post(f"/crews/{crew_id}/settlements/2026-08/compute", headers=_h(owner)).json()
+    assert len(again) == 2
+
+    # "받았어요"는 받는 사람만 (보낸 사람이 누르면 403)
+    target = rows[0]
+    assert client.post(f"/settlements/{target['id']}/received", headers=_h(target["from_user"])).status_code == 403
+    res = client.post(f"/settlements/{target['id']}/received", headers=_h(owner)).json()
+    assert res["status"] == "confirmed"
+
+    # 미정산 배지: 남은 1건
+    unsettled = [r for r in client.get(f"/crews/{crew_id}/settlements", headers=_h(owner)).json() if r["unsettled"]]
+    assert len(unsettled) == 1

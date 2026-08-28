@@ -97,6 +97,9 @@ def handoff(session_id: str, action: str, user: User = Depends(get_current_user)
         session.handoff_started_at = _now()
     elif action == "end" and session.handoff_ended_at is None:
         session.handoff_ended_at = _now()
+        from app.domain import ledger_service
+
+        ledger_service.record_session_credits(db, session)
     db.flush()
     return {"ok": True}
 

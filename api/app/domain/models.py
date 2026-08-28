@@ -228,3 +228,44 @@ class SessionPhoto(Base):
     uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     storage_path: Mapped[str] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+# --- P4: 장부·정산 ---
+
+
+class LedgerEntry(Base):
+    """크레딧 장부 (아이·시간 단위, 제로섬 — docs/00-ideation.md §21).
+
+    I5: 크레딧은 비화폐·환급 불가. 이 테이블은 기록일 뿐 어떤 이체도 실행하지 않는다.
+    감사 원칙: 항목은 수정·삭제하지 않는다 (정정은 반대 부호 항목 추가로).
+    """
+
+    __tablename__ = "ledger_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    session_id: Mapped[str] = mapped_column(ForeignKey("care_sessions.id"))
+    delta_child_hours: Mapped[int] = mapped_column()  # 돌봄자 양수, 맡긴 가정 음수
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class SettlementStatus(enum.StrEnum):
+    PENDING = "pending"      # 앱이 계산·독촉만 함
+    CONFIRMED = "confirmed"  # 받은 쪽이 "받았어요" 탭
+
+
+class Settlement(Base):
+    """월말 정산 제안. 앱은 계산+독촉+딥링크까지만 — 이체는 당사자 페이 앱에서 (I5)."""
+
+    __tablename__ = "settlements"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    month: Mapped[str] = mapped_column(String(7))  # "2026-08"
+    from_user: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    to_user: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    amount_krw: Mapped[int] = mapped_column()
+    status: Mapped[SettlementStatus] = mapped_column(String(10), default=SettlementStatus.PENDING)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(default=None)

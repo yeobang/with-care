@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import BoardScreen from "./src/screens/BoardScreen";
 import CrewScreen from "./src/screens/CrewScreen";
 import HomeScreen from "./src/screens/HomeScreen";
+import LedgerScreen from "./src/screens/LedgerScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 
 const Stack = createNativeStackNavigator();
@@ -33,6 +34,11 @@ export default function App() {
           name="Crew"
           component={CrewScreen}
           options={({ route }: any) => ({ title: route.params?.name ?? "크루" })}
+        />
+        <Stack.Screen
+          name="Ledger"
+          component={LedgerScreen}
+          options={({ route }: any) => ({ title: `${route.params?.name ?? ""} 장부·정산` })}
         />
         <Stack.Screen
           name="Board"

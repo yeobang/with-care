@@ -15,8 +15,6 @@ from app.domain.errors import (
 )
 from app.domain.models import User
 
-PENDING = pytest.mark.xfail(reason="구현 단계 도달 전 (docs/03-dev-plan.md)", strict=False)
-
 
 # --- I1: 본인인증 + 크루 초대 없이는 인계 불가 (P1 절반: 멤버십 관문) ---
 
@@ -141,9 +139,33 @@ def test_i8_no_age_branching_in_domain_source():
     assert not violations, f"연령 분기 발견 (I8): {violations}"
 
 
-# --- 구현 단계 미도달 (P4에서 전환) ---
+# --- I5: 이웃 트랙의 돈은 만지지 않는다 ---
 
-@PENDING
-def test_i5_no_money_in_neighbor_track():
-    """I5: 크레딧 환급·이체 실행 코드 부재 검증. (P4)"""
-    raise NotImplementedError
+
+def test_i5_no_money_moving_routes():
+    """이체·환급·출금을 실행하는 API 경로 자체가 존재하지 않아야 한다."""
+    from app.main import app
+
+    FORBIDDEN = ("withdraw", "refund", "transfer", "payout", "pay", "charge")
+    paths = [r.path.lower() for r in app.routes]
+    violations = [p for p in paths for w in FORBIDDEN if w in p]
+    assert not violations, f"돈을 움직이는 경로 발견 (I5): {violations}"
+
+
+def test_i5_no_payment_execution_in_source():
+    """서버 소스에 결제 실행(PG·계좌이체 API) 호출이 없어야 한다.
+
+    허용: 페이 앱 딥링크 문자열(클라이언트에서 사용자의 페이 앱을 열 뿐, 서버는 돈을 안 만짐).
+    시터 트랙 결제 도입(수익화 시점) 시에는 이 테스트를 시터 모듈 예외와 함께 갱신한다 (§19-1).
+    """
+    import pathlib
+
+    FORBIDDEN = ("tosspayments", "portone", "bootpay", "iamport", "openbanking", "kftc")
+    app_dir = pathlib.Path(__file__).parents[2] / "app"
+    violations = []
+    for f in app_dir.rglob("*.py"):
+        text = f.read_text(encoding="utf-8").lower()
+        for w in FORBIDDEN:
+            if w in text:
+                violations.append(f"{f.name}: {w}")
+    assert not violations, f"결제 실행 코드 발견 (I5): {violations}"
