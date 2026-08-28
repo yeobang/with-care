@@ -1,0 +1,40 @@
+import { StyleSheet } from "react-native";
+
+export const ui = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#fff", padding: 20, alignItems: "center", justifyContent: "center" },
+  screen: { flex: 1, backgroundColor: "#fff", padding: 16 },
+  title: { fontSize: 28, fontWeight: "700" },
+  subtitle: { fontSize: 14, color: "#888", marginTop: 8 },
+  hint: { fontSize: 12, color: "#aaa", marginTop: 12, textAlign: "center" },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginTop: 20, marginBottom: 8 },
+  card: {
+    borderWidth: 1,
+    borderColor: "#eee",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: "#fafafa",
+  },
+  primaryBtn: {
+    backgroundColor: "#111",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  primaryBtnText: { color: "#fff", fontWeight: "600" },
+  smallBtn: {
+    backgroundColor: "#eee",
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    marginTop: 6,
+  },
+  smallBtnActive: { backgroundColor: "#111" },
+  smallBtnText: { fontSize: 13, color: "#111" },
+  smallBtnTextActive: { color: "#fff" },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 10, marginTop: 8 },
+});
