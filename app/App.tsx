@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NavigationContainer } from "@react-navigation/native";
+import { LinkingOptions, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
@@ -7,9 +7,22 @@ import BoardScreen from "./src/screens/BoardScreen";
 import CrewScreen from "./src/screens/CrewScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import LedgerScreen from "./src/screens/LedgerScreen";
+import InviteScreen from "./src/screens/InviteScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 
 const Stack = createNativeStackNavigator();
+
+// 카톡 링크 → 웹 현관: https://<host>/invite/<token> 이 InviteScreen으로 연결된다 (P5)
+const linking: LinkingOptions<{}> = {
+  prefixes: [],
+  config: {
+    screens: {
+      Invite: "invite/:token",
+      Home: "home",
+      Login: "",
+    },
+  },
+};
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -25,10 +38,11 @@ export default function App() {
   if (!ready) return null;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <StatusBar style="auto" />
       <Stack.Navigator initialRouteName={loggedIn ? "Home" : "Login"}>
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: "with-care" }} />
         <Stack.Screen
           name="Crew"

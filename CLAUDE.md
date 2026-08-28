@@ -36,7 +36,7 @@
 
 ## 현재 단계
 
-- **개발 플랜 확정** ([docs/03-dev-plan.md](docs/03-dev-plan.md)) — 현재 P0 착수 전
+- **P0~P5 완료** ([docs/03-dev-plan.md](docs/03-dev-plan.md)) — MVP 파이프라인 한 바퀴 동작. P6(시터 트랙)은 검토 후
 - 스택: **Expo RN(TS) 앱 + Expo Web 현관 + FastAPI(Python) + Supabase(인프라만)**
 - 경계 룰: 도메인 규칙(I1~I8)은 FastAPI에만. 앱은 Supabase 직접 쓰기 금지, 모든 쓰기는 API 경유
 - MVP = 주간 보드 파이프라인 한 바퀴: 가능시간 입력 → 배정 → 빈칸 → (크루 재요청 → 시터 공구) → 세션 → 사진 → 장부 → 월말 정산

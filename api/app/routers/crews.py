@@ -37,6 +37,33 @@ def create_invite(crew_id: str, user: User = Depends(get_current_user), db: Sess
     return {"token": invite.token}
 
 
+@router.get("/invites/{token}")
+def invite_preview(token: str, db: Session = Depends(get_db)):
+    """초대장 미리보기 — 인증 불요 (카톡 링크의 첫 화면).
+
+    I6 주의: 토큰 소지자에게만, 초대장에 담길 최소 정보만 노출한다 (이름·가구 수).
+    장부·아이·규약 등은 합류(멤버십) 후에만.
+    """
+    from fastapi import HTTPException
+
+    from app.domain.models import Crew, Invite
+
+    invite = db.get(Invite, token)
+    if invite is None:
+        raise HTTPException(status_code=404, detail="유효하지 않은 초대")
+    crew = db.get(Crew, invite.crew_id)
+    inviter = db.get(User, invite.inviter_id)
+    member_count = len(
+        db.scalars(select(CrewMember).where(CrewMember.crew_id == crew.id)).all()
+    )
+    return {
+        "crew_name": crew.name,
+        "inviter_name": inviter.name,
+        "member_count": member_count,
+        "used": invite.used_by is not None,
+    }
+
+
 @router.post("/invites/{token}/join")
 def join(token: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     member = svc.join_crew(db, user, token)
