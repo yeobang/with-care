@@ -108,6 +108,32 @@ export interface Assignment {
   children: AssignmentChild[];
 }
 
+export interface SitterQuoteFamily {
+  guardian_id: string;
+  confirmed: boolean;
+}
+
+export interface SitterQuote {
+  id: string;
+  sitter_user_id: string;
+  hourly_krw: number;
+  surge: boolean;
+  total_krw: number;
+  per_family_krw: number;
+  status: string;
+  families: SitterQuoteFamily[];
+}
+
+export interface SitterRequest {
+  id: string;
+  date: string;
+  start_hour: number;
+  end_hour: number;
+  status: string;
+  child_count: number;
+  quotes: SitterQuote[];
+}
+
 export interface CareSession {
   id: string;
   caregiver_id: string;

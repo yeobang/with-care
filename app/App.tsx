@@ -7,6 +7,7 @@ import BoardScreen from "./src/screens/BoardScreen";
 import CrewScreen from "./src/screens/CrewScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import LedgerScreen from "./src/screens/LedgerScreen";
+import SitterScreen from "./src/screens/SitterScreen";
 import InviteScreen from "./src/screens/InviteScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/supabase";
@@ -65,6 +66,11 @@ export default function App() {
           name="Board"
           component={BoardScreen}
           options={({ route }: any) => ({ title: `${route.params?.name ?? ""} 주간 보드` })}
+        />
+        <Stack.Screen
+          name="Sitter"
+          component={SitterScreen}
+          options={({ route }: any) => ({ title: `${route.params?.name ?? ""} 시터 공구` })}
         />
       </Stack.Navigator>
     </NavigationContainer>

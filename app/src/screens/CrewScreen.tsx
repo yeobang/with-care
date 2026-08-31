@@ -118,6 +118,12 @@ export default function CrewScreen({ route, navigation }: any) {
           >
             <Text style={ui.primaryBtnText}>장부·정산 열기</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={ui.primaryBtn}
+            onPress={() => navigation.navigate("Sitter", { crewId, name: crew.name })}
+          >
+            <Text style={ui.primaryBtnText}>시터 공구 열기</Text>
+          </TouchableOpacity>
 
           {badges.length > 0 && (
             <>

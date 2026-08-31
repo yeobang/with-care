@@ -25,7 +25,7 @@ function nextMonday(): string {
   return d.toISOString().slice(0, 10);
 }
 
-export default function BoardScreen({ route }: any) {
+export default function BoardScreen({ route, navigation }: any) {
   const { crewId } = route.params;
   const [date] = useState(nextMonday());
   const [myId, setMyId] = useState<string | null>(null);
@@ -138,12 +138,20 @@ export default function BoardScreen({ route }: any) {
               {g.start_hour}시~{g.end_hour}시 · 돌봄자가 없어요
             </Text>
           ))}
-          <TouchableOpacity
-            style={ui.smallBtn}
-            onPress={guard(() => api.post(`/crews/${crewId}/board/rerequest?date=${date}`))}
-          >
-            <Text style={ui.smallBtnText}>크루에 재요청 보내기</Text>
-          </TouchableOpacity>
+          <View style={ui.row}>
+            <TouchableOpacity
+              style={ui.smallBtn}
+              onPress={guard(() => api.post(`/crews/${crewId}/board/rerequest?date=${date}`))}
+            >
+              <Text style={ui.smallBtnText}>크루에 재요청 보내기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={ui.smallBtn}
+              onPress={() => navigation.navigate("Sitter", { crewId, name: route.params?.name })}
+            >
+              <Text style={ui.smallBtnText}>시터 공구로 넘기기</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
