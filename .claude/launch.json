@@ -3,14 +3,14 @@
   "configurations": [
     {
       "name": "api",
-      "runtimeExecutable": "D:/py-project/with-care/api/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "D:/py-project/with-care/api"],
+      "runtimeExecutable": "/Users/yeobang/develop/with-care/api/.venv/bin/python",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "/Users/yeobang/develop/with-care/api"],
       "port": 8000
     },
     {
       "name": "app",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "D:/py-project/with-care/app", "run", "web"],
+      "runtimeArgs": ["--prefix", "/Users/yeobang/develop/with-care/app", "run", "web"],
       "port": 8081
     }
   ]
