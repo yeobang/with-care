@@ -26,6 +26,8 @@ from app.domain.models import (
     Settlement,
     SettlementMode,
     SettlementStatus,
+    SitterQuote,
+    SitterQuoteFamily,
 )
 from app.infra import push
 
@@ -58,6 +60,18 @@ def _assignment_guardians(db: DbSession, assignment_id: str) -> set[str]:
     return {db.get(Child, r.child_id).guardian_id for r in rows}
 
 
+def _session_guardians(db: DbSession, session: CareSession) -> set[str]:
+    """세션 출처(이웃 배정/시터 견적)에 따라 관련 가정을 계산 (P10)."""
+    if session.assignment_id is not None:
+        return _assignment_guardians(db, session.assignment_id)
+    if session.sitter_quote_id is not None:
+        fams = db.scalars(
+            select(SitterQuoteFamily).where(SitterQuoteFamily.quote_id == session.sitter_quote_id)
+        ).all()
+        return {f.guardian_id for f in fams}
+    return set()
+
+
 # --- 이벤트 알림 ---
 
 
@@ -74,7 +88,7 @@ def notify_proposals(db: DbSession, proposals: list[Assignment]) -> None:
 
 def notify_session_confirmed(db: DbSession, session: CareSession) -> None:
     """전원 확정 → 세션 성립. 돌봄자 포함 전원에게."""
-    targets = _assignment_guardians(db, session.assignment_id) | {session.caregiver_id}
+    targets = _session_guardians(db, session) | {session.caregiver_id}
     _send_to(
         db,
         targets,
@@ -85,7 +99,7 @@ def notify_session_confirmed(db: DbSession, session: CareSession) -> None:
 
 def notify_photo(db: DbSession, session: CareSession, uploader_id: str) -> None:
     """세션 사진 도착 → 업로더 제외 해당 가정들에 (크루 한정, I6)."""
-    targets = _assignment_guardians(db, session.assignment_id) - {uploader_id}
+    targets = _session_guardians(db, session) - {uploader_id}
     _send_to(db, targets, "사진이 도착했어요", "오늘 돌봄 사진을 확인해보세요")
 
 
@@ -117,9 +131,7 @@ def notify_declined(db: DbSession, assignment: Assignment, decliner_id: str) -> 
 
 def notify_cancel(db: DbSession, session: CareSession, canceler_id: str) -> None:
     """세션 취소 (P9) — 취소한 사람 제외 참여자 전원에게."""
-    targets = (
-        _assignment_guardians(db, session.assignment_id) | {session.caregiver_id}
-    ) - {canceler_id}
+    targets = (_session_guardians(db, session) | {session.caregiver_id}) - {canceler_id}
     _send_to(
         db, targets, "세션이 취소됐어요",
         f"{session.date} {session.start_hour}~{session.end_hour}시 — 보드에서 다시 조율해주세요",
@@ -132,6 +144,36 @@ def notify_incident(db: DbSession, incident: SessionIncident) -> None:
     _send_to(
         db, {incident.offender_id}, f"{kind_ko} 기록 안내",
         f"크루 규약에 따라 벌금 {incident.fine_krw:,}원이 안내돼요 (앱은 징수하지 않아요)",
+    )
+
+
+def notify_new_quote(db: DbSession, quote: SitterQuote) -> None:
+    """시터 견적 도착 (P10) — 참여 가정들에게. 확정은 각 가정의 탭 (I4)."""
+    fams = db.scalars(
+        select(SitterQuoteFamily).where(SitterQuoteFamily.quote_id == quote.id)
+    ).all()
+    surge = " · 당일 긴급 할증 1.5배" if quote.surge else ""
+    _send_to(
+        db, {f.guardian_id for f in fams}, "시터 견적 도착",
+        f"총 {quote.total_krw:,}원 · 가정당 {quote.per_family_krw:,}원{surge} — 확정 탭은 각 가정이 직접",
+    )
+
+
+def notify_sitter_fallback(db: DbSession, crew_id: str) -> None:
+    """§25-5: 시터 세션 취소 → 크루 전체 즉시 알림 + 공구 재가동 안내 (§4-A)."""
+    members = db.scalars(select(CrewMember).where(CrewMember.crew_id == crew_id)).all()
+    _send_to(
+        db, {m.user_id for m in members}, "시터 돌봄 취소",
+        "공구 요청을 다시 열었어요 — 크루 재요청 폴백을 재가동합니다",
+    )
+
+
+def notify_recurrence(db: DbSession, crew_id: str) -> None:
+    """§25-6: 상시성 주의 경고 — 차단이 아니라 안내 (§19-2: 정기 돌봄은 자격·등록 통로)."""
+    members = db.scalars(select(CrewMember).where(CrewMember.crew_id == crew_id)).all()
+    _send_to(
+        db, {m.user_id for m in members}, "상시성 주의",
+        "같은 시터와의 돌봄이 이번 주 2회 이상이에요 — 정기 돌봄은 자격·등록 통로 검토를 권해요",
     )
 
 

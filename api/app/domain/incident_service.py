@@ -16,16 +16,25 @@ from app.domain.models import (
     Child,
     IncidentKind,
     SessionIncident,
+    SitterQuoteFamily,
     User,
     _now,
 )
 
 
 def _participants(db: DbSession, session: CareSession) -> set[str]:
-    rows = db.scalars(
-        select(AssignmentChild).where(AssignmentChild.assignment_id == session.assignment_id)
-    ).all()
-    return {db.get(Child, r.child_id).guardian_id for r in rows} | {session.caregiver_id}
+    guardians: set[str] = set()
+    if session.assignment_id is not None:
+        rows = db.scalars(
+            select(AssignmentChild).where(AssignmentChild.assignment_id == session.assignment_id)
+        ).all()
+        guardians = {db.get(Child, r.child_id).guardian_id for r in rows}
+    elif session.sitter_quote_id is not None:  # P10: 시터 세션은 견적 참여 가정 기준
+        fams = db.scalars(
+            select(SitterQuoteFamily).where(SitterQuoteFamily.quote_id == session.sitter_quote_id)
+        ).all()
+        guardians = {f.guardian_id for f in fams}
+    return guardians | {session.caregiver_id}
 
 
 def cancel_session(db: DbSession, session_id: str, user: User) -> CareSession:

@@ -9,12 +9,14 @@ from app.domain import board_service as board
 from app.domain import incident_service
 from app.domain.crew_service import _require_member
 from app.domain.models import IncidentKind
+from app.domain import sitter_service
 from app.domain.models import (
     Assignment,
     AssignmentChild,
     BoardSlot,
     CareSession,
     Child,
+    MemberRole,
     SlotKind,
     User,
 )
@@ -104,8 +106,10 @@ def decline(assignment_id: str, user: User = Depends(get_current_user), db: Sess
 
 @router.get("/crews/{crew_id}/sessions")
 def list_sessions(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _require_member(db, crew_id, user.id)
+    member = _require_member(db, crew_id, user.id)
     rows = db.scalars(select(CareSession).where(CareSession.crew_id == crew_id)).all()
+    if member.role == MemberRole.SITTER:
+        rows = [s for s in rows if s.caregiver_id == user.id]  # §25-2: 시터는 자기 세션만
     return [
         {
             "id": s.id, "caregiver_id": s.caregiver_id, "date": s.date,
@@ -148,6 +152,9 @@ def cancel_session(session_id: str, user: User = Depends(get_current_user), db: 
     session = incident_service.cancel_session(db, session_id, user)
     if not was_canceled:
         notifications.notify_cancel(db, session, user.id)
+        if session.sitter_quote_id is not None:  # §25-5: 시터 노쇼·취소 → 폴백 재가동
+            sitter_service.reopen_after_cancel(db, session)
+            notifications.notify_sitter_fallback(db, session.crew_id)
     return {"ok": True}
 
 

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.domain import errors
-from app.domain.crew_service import _require_member
+from app.domain.crew_service import _require_member, _require_parent
 from app.domain.models import (
     Assignment,
     AssignmentChild,
@@ -30,6 +30,8 @@ def record_session_credits(db: DbSession, session: CareSession) -> None:
     """
     if session.canceled_at is not None:
         return  # P9: 취소된 세션은 장부 대상이 아니다
+    if session.assignment_id is None:
+        return  # P10: 시터 세션은 크레딧 장부 무관 (§25-4 — 이웃=크레딧, 시터=돈)
     existing = db.scalar(
         select(LedgerEntry).where(LedgerEntry.session_id == session.id)
     )
@@ -65,7 +67,7 @@ def record_session_credits(db: DbSession, session: CareSession) -> None:
 
 
 def balances(db: DbSession, crew_id: str, requester: User) -> dict[str, int]:
-    _require_member(db, crew_id, requester.id)
+    _require_parent(db, crew_id, requester.id)  # §25-2: 장부·정산은 부모 전용
     rows = db.execute(
         select(LedgerEntry.user_id, func.sum(LedgerEntry.delta_child_hours))
         .where(LedgerEntry.crew_id == crew_id)
@@ -79,7 +81,7 @@ def compute_settlement(db: DbSession, crew_id: str, month: str, requester: User)
 
     잔액 음수 가정 → 양수 가정으로 greedy 매칭. 금액 = 크레딧 × 규약 단가.
     """
-    _require_member(db, crew_id, requester.id)
+    _require_parent(db, crew_id, requester.id)  # §25-2: 장부·정산은 부모 전용
     existing = db.scalars(
         select(Settlement).where(Settlement.crew_id == crew_id, Settlement.month == month)
     ).all()

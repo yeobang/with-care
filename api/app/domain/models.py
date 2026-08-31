@@ -59,6 +59,11 @@ class Crew(Base):
     members: Mapped[list["CrewMember"]] = relationship(back_populates="crew")
 
 
+class MemberRole(enum.StrEnum):
+    PARENT = "parent"
+    SITTER = "sitter"  # §25-1: 시터도 I1(본인인증+초대)을 거친 멤버 — 단, 접근은 세분화(§25-2)
+
+
 class CrewMember(Base):
     __tablename__ = "crew_members"
     __table_args__ = (UniqueConstraint("crew_id", "user_id"),)
@@ -67,6 +72,7 @@ class CrewMember(Base):
     crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     is_owner: Mapped[bool] = mapped_column(default=False)
+    role: Mapped[MemberRole] = mapped_column(String(10), default=MemberRole.PARENT)
     joined_at: Mapped[datetime] = mapped_column(default=_now)
 
     crew: Mapped[Crew] = relationship(back_populates="members")
@@ -78,6 +84,7 @@ class Invite(Base):
     token: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
     inviter_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    role: Mapped[MemberRole] = mapped_column(String(10), default=MemberRole.PARENT)  # §25-1
     used_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
@@ -201,13 +208,21 @@ class AssignmentChild(Base):
 
 
 class CareSession(Base):
-    """확정된 돌봄 세션. Assignment 전원 확정 시에만 생성된다."""
+    """확정된 돌봄 세션 — 이웃 배정(assignment) 또는 시터 견적(sitter_quote) 전원 확정 시에만.
+
+    출처는 둘 중 하나: assignment_id(이웃, 크레딧 장부 대상) / sitter_quote_id(시터, 장부 무관 §25-4).
+    """
 
     __tablename__ = "care_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
-    assignment_id: Mapped[str] = mapped_column(ForeignKey("assignments.id"), unique=True)
+    assignment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("assignments.id"), unique=True, default=None
+    )
+    sitter_quote_id: Mapped[str | None] = mapped_column(
+        ForeignKey("sitter_quotes.id"), unique=True, default=None
+    )
     caregiver_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     date: Mapped[str] = mapped_column(String(10))
     start_hour: Mapped[int] = mapped_column()
@@ -276,6 +291,85 @@ class Settlement(Base):
     status: Mapped[SettlementStatus] = mapped_column(String(10), default=SettlementStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(default=_now)
     confirmed_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
+# --- P10: 시터 트랙 (결제 제외 — §23 확정 결정 3, 세부 §25) ---
+
+
+class SitterProfile(Base):
+    """시터 프로필 (이웃→시터 승급 문). 승급 요건 검증(§17-B)은 후속 — 지금은 자기 선언."""
+
+    __tablename__ = "sitter_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True)
+    hourly_krw: Mapped[int] = mapped_column()
+    intro: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class SitterRequestStatus(enum.StrEnum):
+    OPEN = "open"          # 견적 받는 중
+    MATCHED = "matched"    # 세션 성립
+    CANCELED = "canceled"
+
+
+class SitterRequest(Base):
+    """시터 공구 요청 — 빈칸의 폴백 2단계 (§12 등뼈)."""
+
+    __tablename__ = "sitter_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    date: Mapped[str] = mapped_column(String(10))
+    start_hour: Mapped[int] = mapped_column()
+    end_hour: Mapped[int] = mapped_column()
+    status: Mapped[SitterRequestStatus] = mapped_column(String(10), default=SitterRequestStatus.OPEN)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class SitterRequestChild(Base):
+    """공구 참여 아이 — 각 가정이 자기 아이로만 참여한다."""
+
+    __tablename__ = "sitter_request_children"
+    __table_args__ = (UniqueConstraint("request_id", "child_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    request_id: Mapped[str] = mapped_column(ForeignKey("sitter_requests.id"))
+    child_id: Mapped[str] = mapped_column(ForeignKey("children.id"))
+
+
+class SitterQuote(Base):
+    """시터 견적 = 후보 (I4: 복수 후보 나열, 효력은 전 가정 확정 탭에서만).
+
+    금액은 계산·안내까지 — 결제 코드는 없다 (§25-4).
+    """
+
+    __tablename__ = "sitter_quotes"
+    __table_args__ = (UniqueConstraint("request_id", "sitter_user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    request_id: Mapped[str] = mapped_column(ForeignKey("sitter_requests.id"))
+    sitter_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    hourly_krw: Mapped[int] = mapped_column()   # 제출 시점 프로필 스냅샷
+    surge: Mapped[bool] = mapped_column(default=False)  # 당일 요청 1.5배 (§25-3)
+    total_krw: Mapped[int] = mapped_column()
+    per_family_krw: Mapped[int] = mapped_column()  # 분할 견적 (절사)
+    status: Mapped[ProposalStatus] = mapped_column(String(10), default=ProposalStatus.PROPOSED)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class SitterQuoteFamily(Base):
+    """가정별 확정 탭 (I4) — 전원 확정 시에만 세션 성립."""
+
+    __tablename__ = "sitter_quote_families"
+    __table_args__ = (UniqueConstraint("quote_id", "guardian_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    quote_id: Mapped[str] = mapped_column(ForeignKey("sitter_quotes.id"))
+    guardian_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    confirmed: Mapped[bool] = mapped_column(default=False)
 
 
 # --- P9: 규약 집행 ---

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain.crew_service import _require_member
-from app.domain.models import CareSession, SessionPhoto, User
+from app.domain.models import CareSession, MemberRole, SessionPhoto, User
 from app.infra import storage
 
 router = APIRouter(tags=["photos"])
@@ -26,7 +26,9 @@ async def upload_photo(
     session = db.get(CareSession, session_id)
     if session is None:
         raise HTTPException(status_code=404)
-    _require_member(db, session.crew_id, user.id)  # I6
+    member = _require_member(db, session.crew_id, user.id)  # I6
+    if member.role == MemberRole.SITTER and session.caregiver_id != user.id:
+        raise HTTPException(status_code=403, detail="시터는 자기 세션만 접근할 수 있다 (§25-2)")
     ext = ALLOWED_TYPES.get(file.content_type or "")
     if ext is None:
         raise HTTPException(status_code=422, detail="jpeg/png/webp만 허용")
@@ -54,7 +56,9 @@ def list_photos(
     session = db.get(CareSession, session_id)
     if session is None:
         raise HTTPException(status_code=404)
-    _require_member(db, session.crew_id, user.id)  # I6: 멤버십 검증 후에만 시한부 서명 URL 발급
+    member = _require_member(db, session.crew_id, user.id)  # I6: 멤버십 검증 후에만 시한부 서명 URL 발급
+    if member.role == MemberRole.SITTER and session.caregiver_id != user.id:
+        raise HTTPException(status_code=403, detail="시터는 자기 세션만 접근할 수 있다 (§25-2)")
     rows = db.scalars(
         select(SessionPhoto).where(SessionPhoto.session_id == session_id)
     ).all()

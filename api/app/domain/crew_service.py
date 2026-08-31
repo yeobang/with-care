@@ -17,6 +17,7 @@ from app.domain.models import (
     CrewMember,
     CrewStatus,
     Invite,
+    MemberRole,
     User,
     _now,
 )
@@ -37,9 +38,11 @@ def create_crew(db: DbSession, owner: User, name: str) -> Crew:
     return crew
 
 
-def create_invite(db: DbSession, crew_id: str, inviter: User) -> Invite:
-    _require_member(db, crew_id, inviter.id)
-    invite = Invite(crew_id=crew_id, inviter_id=inviter.id)
+def create_invite(
+    db: DbSession, crew_id: str, inviter: User, role: MemberRole = MemberRole.PARENT
+) -> Invite:
+    _require_parent(db, crew_id, inviter.id)  # 초대는 부모 멤버만 (§25-2)
+    invite = Invite(crew_id=crew_id, inviter_id=inviter.id, role=role)
     db.add(invite)
     db.flush()
     return invite
@@ -62,7 +65,7 @@ def join_crew(db: DbSession, user: User, invite_token: str) -> CrewMember:
     if already is not None:
         raise ValueError("이미 이 크루의 멤버다")  # 초대장은 소모하지 않는다
     invite.used_by = user.id
-    member = CrewMember(crew_id=invite.crew_id, user_id=user.id)
+    member = CrewMember(crew_id=invite.crew_id, user_id=user.id, role=invite.role)
     db.add(member)
     db.flush()
     return member
@@ -192,4 +195,12 @@ def _require_member(db: DbSession, crew_id: str, user_id: str) -> CrewMember:
     )
     if member is None:
         raise errors.CrewIsolationViolation("크루 데이터는 크루 멤버만 접근할 수 있다 (I6)")
+    return member
+
+
+def _require_parent(db: DbSession, crew_id: str, user_id: str) -> CrewMember:
+    """§25-2: 장부·보드 쓰기·초대·규약은 부모 멤버 전용 — 시터의 접근 경계 (I6 세분화)."""
+    member = _require_member(db, crew_id, user_id)
+    if member.role != MemberRole.PARENT:
+        raise errors.CrewIsolationViolation("부모 멤버 전용 기능이다 (§25-2)")
     return member

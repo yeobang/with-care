@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain import ledger_service as ledger
-from app.domain.crew_service import _require_member
+from app.domain.crew_service import _require_parent
 from app.domain.models import Settlement, SettlementStatus, User
 
 router = APIRouter(tags=["ledger"])
@@ -24,7 +24,7 @@ def compute(crew_id: str, month: str, user: User = Depends(get_current_user), db
 
 @router.get("/crews/{crew_id}/settlements")
 def list_settlements(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _require_member(db, crew_id, user.id)
+    _require_parent(db, crew_id, user.id)  # §25-2: 장부·정산은 부모 전용
     rows = db.scalars(select(Settlement).where(Settlement.crew_id == crew_id)).all()
     return [_out(s) for s in rows]
 
@@ -32,7 +32,7 @@ def list_settlements(crew_id: str, user: User = Depends(get_current_user), db: S
 @router.post("/crews/{crew_id}/settlements/nudge")
 def nudge(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """미정산 독촉 (수동 트리거 — 매일 09:00 자동 독촉과 별개). 앱이 악역을 대신한다."""
-    _require_member(db, crew_id, user.id)
+    _require_parent(db, crew_id, user.id)  # §25-2: 장부·정산은 부모 전용
     return {"nudged_users": notifications.nudge_settlements(db, crew_id)}
 
 

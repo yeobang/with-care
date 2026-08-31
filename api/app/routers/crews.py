@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_current_user, get_db
 from app.domain import crew_service as svc
-from app.domain.models import Charter, CrewMember, SettlementMode, User
+from app.domain.models import Charter, CrewMember, MemberRole, SettlementMode, User
 
 router = APIRouter(tags=["crews"])
 
@@ -31,10 +31,21 @@ def crew_view(crew_id: str, user: User = Depends(get_current_user), db: Session 
     return svc.get_crew_view(db, crew_id, user)
 
 
+class InviteIn(BaseModel):
+    """초대 역할 — 기본 parent. 시터 초대는 role=sitter (§25-1)."""
+
+    role: MemberRole = MemberRole.PARENT
+
+
 @router.post("/crews/{crew_id}/invites")
-def create_invite(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    invite = svc.create_invite(db, crew_id, user)
-    return {"token": invite.token}
+def create_invite(
+    crew_id: str,
+    body: InviteIn | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invite = svc.create_invite(db, crew_id, user, role=body.role if body else MemberRole.PARENT)
+    return {"token": invite.token, "role": str(invite.role)}
 
 
 @router.get("/invites/{token}")

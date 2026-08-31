@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.domain import errors
-from app.domain.crew_service import _require_member
+from app.domain.crew_service import _require_member, _require_parent
 from app.domain.models import Consent
 from app.domain.models import (
     Assignment,
@@ -63,7 +63,7 @@ def add_slot(
     db: DbSession, crew_id: str, user: User, *, kind: SlotKind,
     date: str, start_hour: int, end_hour: int, child_id: str | None = None,
 ) -> BoardSlot:
-    _require_member(db, crew_id, user.id)
+    _require_parent(db, crew_id, user.id)  # §25-2: 보드 쓰기는 부모 전용
     _require_active(db, crew_id)
     _require_consent(db, crew_id, user.id)
     if not (0 <= start_hour < end_hour <= 24):
@@ -85,7 +85,7 @@ def propose_assignments(db: DbSession, crew_id: str, user: User, date: str) -> l
     후보는 PROPOSED 상태로만 생성되며 아무 효력이 없다 (I4).
     같은 시간대에 가능한 돌봄자가 여럿이면 후보도 여럿 만든다 — 단일 추천 금지.
     """
-    _require_member(db, crew_id, user.id)
+    _require_parent(db, crew_id, user.id)  # §25-2: 보드 쓰기는 부모 전용
     _require_active(db, crew_id)
     needs = db.scalars(
         select(BoardSlot).where(
@@ -150,7 +150,7 @@ def find_gaps(db: DbSession, crew_id: str, user: User, date: str) -> list[dict]:
     부분 커버도 빈칸으로 본다 — 반쪽 돌봄은 성립하지 않는다는 보수적 기준.
     (폴백 2단계 '시터 공구 제안'은 P10에서 이 결과를 입력으로 쓴다.)
     """
-    _require_member(db, crew_id, user.id)
+    _require_parent(db, crew_id, user.id)  # §25-2: 보드 쓰기는 부모 전용
     _require_active(db, crew_id)
     needs = db.scalars(
         select(BoardSlot).where(
@@ -187,7 +187,7 @@ def decline_assignment(db: DbSession, assignment_id: str, user: User) -> Assignm
     assignment = db.get(Assignment, assignment_id)
     if assignment is None:
         raise ValueError("존재하지 않는 배정 후보")
-    _require_member(db, assignment.crew_id, user.id)
+    _require_parent(db, assignment.crew_id, user.id)
     _require_consent(db, assignment.crew_id, user.id)
     if assignment.status == ProposalStatus.DECLINED:
         return assignment  # 재탭 멱등
@@ -214,7 +214,7 @@ def confirm_assignment(db: DbSession, assignment_id: str, guardian: User) -> Car
     assignment = db.get(Assignment, assignment_id)
     if assignment is None:
         raise ValueError("존재하지 않는 배정 후보")
-    _require_member(db, assignment.crew_id, guardian.id)
+    _require_parent(db, assignment.crew_id, guardian.id)
     _require_consent(db, assignment.crew_id, guardian.id)
 
     if assignment.status == ProposalStatus.CONFIRMED:
