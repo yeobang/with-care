@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.deps import get_current_user, get_db
+from app.domain import crew_service as svc
 from app.domain.models import Child, User
 
 router = APIRouter(tags=["users"])
@@ -57,3 +58,25 @@ def add_child(body: ChildIn, user: User = Depends(get_current_user), db: Session
 @router.get("/my/children", response_model=list[ChildOut])
 def my_children(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.scalars(select(Child).where(Child.guardian_id == user.id)).all()
+
+
+class ChildPatch(BaseModel):
+    """부분 수정 — 보낸 항목만 반영. 수정 시 보호자 재동의가 필요해진다 (§19-5)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=50)
+    birth_year_month: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}$")
+    emergency_contact: str | None = Field(default=None, min_length=1, max_length=100)
+    traits: str | None = None
+    allergies: str | None = None
+    medication: str | None = None
+
+
+@router.patch("/my/children/{child_id}", response_model=ChildOut)
+def update_child(
+    child_id: str,
+    body: ChildPatch,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Child:
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    return svc.update_child(db, user, child_id, **updates)

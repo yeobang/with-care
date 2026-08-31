@@ -56,12 +56,13 @@ def list_photos(
     rows = db.scalars(
         select(SessionPhoto).where(SessionPhoto.session_id == session_id)
     ).all()
+    urls = storage.signed_urls([p.storage_path for p in rows])  # N+1 회피: 일괄 서명
     return [
         {
             "id": p.id,
             "uploaded_by": p.uploaded_by,
             "created_at": p.created_at.isoformat(),
-            "url": storage.signed_url(p.storage_path),
+            "url": urls.get(p.storage_path),
         }
         for p in rows
     ]

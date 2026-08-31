@@ -61,6 +61,7 @@ def invite_preview(token: str, db: Session = Depends(get_db)):
         "inviter_name": inviter.name,
         "member_count": member_count,
         "used": invite.used_by is not None,
+        "expired": svc.invite_expired(invite),
     }
 
 

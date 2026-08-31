@@ -41,8 +41,15 @@ def upload(path: str, content: bytes, content_type: str) -> None:
         res.raise_for_status()
 
 
-def signed_url(path: str) -> str:
+def signed_urls(paths: list[str]) -> dict[str, str]:
+    """여러 경로의 서명 URL을 한 번의 호출로 발급 — 사진 목록의 N+1 외부호출 회피."""
+    if not paths:
+        return {}
     with _client() as c:
-        res = c.post(f"/object/sign/{BUCKET}/{path}", json={"expiresIn": SIGN_EXPIRES_SEC})
+        res = c.post(f"/object/sign/{BUCKET}", json={"paths": paths, "expiresIn": SIGN_EXPIRES_SEC})
         res.raise_for_status()
-        return f"{settings.supabase_url}/storage/v1{res.json()['signedURL']}"
+        return {
+            item["path"]: f"{settings.supabase_url}/storage/v1{item['signedURL']}"
+            for item in res.json()
+            if item.get("signedURL")
+        }

@@ -119,7 +119,10 @@ def test_session_photos_flow(client, monkeypatch):
     """사진 업로드/조회 + I6: 크루 밖 사용자 차단. 스토리지는 모킹."""
     uploaded = {}
     monkeypatch.setattr("app.infra.storage.upload", lambda path, content, ct: uploaded.update({path: content}))
-    monkeypatch.setattr("app.infra.storage.signed_url", lambda path: f"https://signed.example/{path}")
+    monkeypatch.setattr(
+        "app.infra.storage.signed_urls",
+        lambda paths: {p: f"https://signed.example/{p}" for p in paths},
+    )
 
     # 최소 흐름으로 세션 하나 생성
     users = [client.post("/users", json={"name": f"u{i}"}).json()["id"] for i in range(2)]

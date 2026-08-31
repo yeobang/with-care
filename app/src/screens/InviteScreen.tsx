@@ -9,6 +9,7 @@ interface Preview {
   inviter_name: string;
   member_count: number;
   used: boolean;
+  expired: boolean;
 }
 
 /** 웹 현관: 카톡에 공유된 초대 링크의 첫 화면. 가치를 먼저 보여주고, 가입은 그 다음. */
@@ -58,8 +59,10 @@ export default function InviteScreen({ route, navigation }: any) {
       <Text style={{ marginTop: 12, textAlign: "center" }}>
         {preview.inviter_name}님이 초대했어요 · 현재 {preview.member_count}가구
       </Text>
-      {preview.used ? (
-        <Text style={ui.hint}>이미 사용된 초대예요. 새 초대를 요청해주세요.</Text>
+      {preview.used || preview.expired ? (
+        <Text style={ui.hint}>
+          {preview.used ? "이미 사용된 초대예요." : "기한이 지난 초대예요."} 새 초대를 요청해주세요.
+        </Text>
       ) : (
         <>
           {!loggedIn && (

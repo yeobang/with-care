@@ -3,19 +3,26 @@
 여기의 가드를 우회하는 쓰기 경로를 만들지 않는다 (라우터는 반드시 이 계층을 거친다).
 """
 
+from datetime import timedelta, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.domain import errors
 from app.domain.models import (
     Charter,
+    Child,
     Consent,
     Crew,
     CrewMember,
     CrewStatus,
     Invite,
     User,
+    _now,
 )
+
+# 가정(요구사항에 없는 기본값): 초대장은 7일 후 만료 — 카톡방에 방치된 링크가 영구 관문이 되지 않게
+INVITE_TTL = timedelta(days=7)
 
 
 def create_crew(db: DbSession, owner: User, name: str) -> Crew:
@@ -45,7 +52,7 @@ def join_crew(db: DbSession, user: User, invite_token: str) -> CrewMember:
     """
     _require_verified(user)
     invite = db.get(Invite, invite_token)
-    if invite is None or invite.used_by is not None:
+    if invite is None or invite.used_by is not None or invite_expired(invite):
         raise errors.HandoffGateViolation("유효한 초대 없이는 크루에 합류할 수 없다 (I1)")
     already = db.scalar(
         select(CrewMember).where(
@@ -140,6 +147,36 @@ def get_crew_view(db: DbSession, crew_id: str, requester: User) -> dict:
         "charter_complete": bool(charter and charter.is_complete),
         "member_count": len(members),
     }
+
+
+def invite_expired(invite: Invite) -> bool:
+    created = invite.created_at
+    if created.tzinfo is None:  # SQLite 등은 tz를 벗겨 저장한다
+        created = created.replace(tzinfo=timezone.utc)
+    return _now() - created > INVITE_TTL
+
+
+def update_child(db: DbSession, user: User, child_id: str, **updates) -> Child:
+    """아이 프로필 수정 — 보호자 본인만.
+
+    §19-5/I2: 아이 정보(알레르기·투약 등)가 바뀌면 그 보호자의 포괄 합의를 무효화한다.
+    재동의(submit_consent 재제출) 전에는 보드 참여가 막힌다 (_require_consent).
+    """
+    child = db.get(Child, child_id)
+    if child is None or child.guardian_id != user.id:
+        raise ValueError("존재하지 않는 아이")  # 남의 아이는 존재 여부도 알리지 않는다 (I6)
+    for key, value in updates.items():
+        if key in ("id", "guardian_id") or not hasattr(child, key):
+            raise ValueError(f"수정할 수 없는 항목: {key}")
+        setattr(child, key, value)
+    for m in db.scalars(select(CrewMember).where(CrewMember.user_id == user.id)).all():
+        consent = db.scalar(
+            select(Consent).where(Consent.crew_id == m.crew_id, Consent.user_id == user.id)
+        )
+        if consent is not None:
+            consent.consented_at = None  # 재동의 전까지 is_complete=False
+    db.flush()
+    return child
 
 
 # --- 내부 가드 ---
