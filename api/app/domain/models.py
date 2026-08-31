@@ -273,3 +273,17 @@ class Settlement(Base):
     status: Mapped[SettlementStatus] = mapped_column(String(10), default=SettlementStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(default=_now)
     confirmed_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
+# --- P7: 푸시 ---
+
+
+class PushToken(Base):
+    """Expo 푸시 토큰. 알림은 best-effort — 이 테이블이 비어도 모든 흐름은 동작한다."""
+
+    __tablename__ = "push_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    token: Mapped[str] = mapped_column(String(200), unique=True)
+    created_at: Mapped[datetime] = mapped_column(default=_now)

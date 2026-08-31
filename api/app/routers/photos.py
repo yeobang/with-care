@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain.crew_service import _require_member
 from app.domain.models import CareSession, SessionPhoto, User
@@ -40,6 +41,7 @@ async def upload_photo(
     )
     db.add(photo)
     db.flush()
+    notifications.notify_photo(db, session, user.id)  # best-effort
     return {"id": photo.id}
 
 

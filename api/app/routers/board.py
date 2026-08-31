@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain import board_service as board
 from app.domain.crew_service import _require_member
@@ -51,6 +52,7 @@ def board_view(crew_id: str, date: str, user: User = Depends(get_current_user), 
 @router.post("/crews/{crew_id}/propose")
 def propose(crew_id: str, date: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     proposals = board.propose_assignments(db, crew_id, user, date)
+    notifications.notify_proposals(db, proposals)  # best-effort — 실패해도 본 흐름 유지
     return [_assignment_out(db, a) for a in proposals]
 
 
@@ -65,7 +67,12 @@ def list_proposals(crew_id: str, date: str, user: User = Depends(get_current_use
 
 @router.post("/assignments/{assignment_id}/confirm")
 def confirm(assignment_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    before = db.get(Assignment, assignment_id)
+    was_confirmed = before is not None and str(before.status) == "confirmed"
     session = board.confirm_assignment(db, assignment_id, user)
+    if session is not None and not was_confirmed:
+        # 이번 탭으로 전원 확정이 성립한 순간에만 알림 (재탭 멱등 경로는 무알림)
+        notifications.notify_session_confirmed(db, session)
     return {"session_id": session.id if session else None}
 
 

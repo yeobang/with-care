@@ -1,13 +1,30 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.config import settings
 from app.domain.errors import InvariantViolation
-from app.routers import board, crews, health, ledger, photos, users
+from app.routers import board, crews, health, ledger, photos, push, users
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    sched = None
+    if settings.scheduler_enabled:
+        from app.scheduler import start_scheduler
+
+        sched = start_scheduler()
+    yield
+    if sched is not None:
+        sched.shutdown(wait=False)
+
 
 app = FastAPI(
     title="with-care API",
     description="모든 도메인 규칙(불변식 I1~I8)은 이 API에만 산다. 앱은 Supabase에 직접 쓰지 않는다.",
+    lifespan=lifespan,
 )
 # dev: Expo 웹(8081)에서의 호출 허용. prod 오리진은 배포 시 확정
 app.add_middleware(
@@ -23,6 +40,7 @@ app.include_router(crews.router)
 app.include_router(board.router)
 app.include_router(photos.router)
 app.include_router(ledger.router)
+app.include_router(push.router)
 
 
 @app.exception_handler(InvariantViolation)

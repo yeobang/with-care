@@ -23,7 +23,16 @@ export default function InviteScreen({ route, navigation }: any) {
 
   useEffect(() => {
     api.get<Preview>(`/invites/${token}`).then(setPreview).catch((e) => setError(e.message));
-    AsyncStorage.getItem("userId").then((id) => setLoggedIn(!!id));
+    (async () => {
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          setLoggedIn(true);
+          return;
+        }
+      }
+      setLoggedIn(!!(await AsyncStorage.getItem("userId"))); // dev 헤더 폴백
+    })();
   }, [token]);
 
   const join = async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   Alert,
@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { api, Child, CrewView } from "../api";
+import { registerPush } from "../push";
 import { ui } from "../ui";
 
 export default function HomeScreen({ navigation }: any) {
@@ -24,6 +25,10 @@ export default function HomeScreen({ navigation }: any) {
     api.get<Child[]>("/my/children").then(setChildren).catch(() => {});
   }, []);
   useFocusEffect(load);
+
+  useEffect(() => {
+    registerPush(); // 푸시 토큰 등록 (best-effort — 실패해도 무시)
+  }, []);
 
   const createCrew = async () => {
     if (!crewName.trim()) return;

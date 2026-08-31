@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Alert, Linking, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -26,7 +25,8 @@ export default function LedgerScreen({ route }: any) {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
 
   useEffect(() => {
-    AsyncStorage.getItem("userId").then(setMyId);
+    // JWT·dev 헤더 어느 쪽이든 서버가 아는 내 id (AsyncStorage는 JWT 로그인 때 비어 있다)
+    api.get<{ id: string }>("/me").then((u) => setMyId(u.id)).catch(() => {});
   }, []);
 
   const load = useCallback(() => {
@@ -67,6 +67,17 @@ export default function LedgerScreen({ route }: any) {
       >
         <Text style={ui.primaryBtnText}>{currentMonth()} 정산 계산하기</Text>
       </TouchableOpacity>
+      {unsettledCount > 0 && (
+        <TouchableOpacity
+          style={ui.primaryBtn}
+          onPress={guard(async () => {
+            const r = await api.post<{ nudged_users: number }>(`/crews/${crewId}/settlements/nudge`);
+            Alert.alert("독촉 완료", `${r.nudged_users}명에게 알림을 보냈어요. 매일 아침에도 자동으로 알려드려요.`);
+          })}
+        >
+          <Text style={ui.primaryBtnText}>미정산 독촉 보내기</Text>
+        </TouchableOpacity>
+      )}
       <Text style={ui.hint}>
         정산 모드가 &quot;credit&quot;인 크루만 계산됩니다. 앱은 계산·안내만 하고 돈은 만지지 않아요.
       </Text>

@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -31,7 +30,8 @@ export default function BoardScreen({ route }: any) {
   const [mode, setMode] = useState<"available" | "need">("available");
 
   useEffect(() => {
-    AsyncStorage.getItem("userId").then(setMyId);
+    // JWT·dev 헤더 어느 쪽이든 서버가 아는 내 id
+    api.get<{ id: string }>("/me").then((u) => setMyId(u.id)).catch(() => {});
   }, []);
 
   const load = useCallback(() => {
