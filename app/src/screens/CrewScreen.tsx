@@ -12,15 +12,23 @@ interface Charter {
   is_complete: boolean;
 }
 
+interface IncidentBadge {
+  user_id: string;
+  count: number;
+  fine_krw_total: number;
+}
+
 export default function CrewScreen({ route, navigation }: any) {
   const { crewId } = route.params;
   const [crew, setCrew] = useState<CrewView | null>(null);
   const [charter, setCharter] = useState<Charter | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
+  const [badges, setBadges] = useState<IncidentBadge[]>([]);
 
   const load = useCallback(() => {
     api.get<CrewView>(`/crews/${crewId}`).then(setCrew).catch(() => {});
     api.get<Charter>(`/crews/${crewId}/charter`).then(setCharter).catch(() => {});
+    api.get<IncidentBadge[]>(`/crews/${crewId}/incidents`).then(setBadges).catch(() => {});
   }, [crewId]);
   useFocusEffect(load);
 
@@ -110,6 +118,21 @@ export default function CrewScreen({ route, navigation }: any) {
           >
             <Text style={ui.primaryBtnText}>장부·정산 열기</Text>
           </TouchableOpacity>
+
+          {badges.length > 0 && (
+            <>
+              <Text style={ui.sectionTitle}>노쇼·급취소 기록</Text>
+              {badges.map((b) => (
+                <View key={b.user_id} style={ui.card}>
+                  <Text>
+                    이웃 ({b.user_id.slice(0, 6)}) · {b.count}회 · 안내된 벌금{" "}
+                    {b.fine_krw_total.toLocaleString()}원
+                  </Text>
+                </View>
+              ))}
+              <Text style={ui.hint}>반복은 배지로 투명하게 보여요. 벌금은 규약 안내일 뿐 앱이 걷지 않아요.</Text>
+            </>
+          )}
         </>
       )}
     </ScrollView>

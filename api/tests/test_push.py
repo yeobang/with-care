@@ -206,6 +206,38 @@ def test_decline_notifies_others_once(crew, sent):
     assert len(sent) == n
 
 
+def test_cancel_notifies_others_and_blocks_handoff(crew, sent):
+    """취소 알림(취소자 제외) + 취소된 세션 인계 차단 (P9)."""
+    p = _board(crew)
+    client = crew["client"]
+    client.post(f"/assignments/{p['id']}/confirm", headers=_h(crew["moms"][0]))
+    sid = client.post(f"/assignments/{p['id']}/confirm", headers=_h(crew["moms"][1])).json()["session_id"]
+    sent.clear()
+    assert client.post(f"/sessions/{sid}/cancel", headers=_h(crew["moms"][0])).status_code == 200
+    assert {x["to"] for x in sent} == {_tok(crew["owner"]), _tok(crew["moms"][1])}
+    n = len(sent)
+    client.post(f"/sessions/{sid}/cancel", headers=_h(crew["moms"][0]))  # 재탭 무알림
+    assert len(sent) == n
+    assert client.post(f"/sessions/{sid}/handoff/start", headers=_h(crew["owner"])).status_code == 422
+
+
+def test_incident_fine_notice_to_offender_once(crew, sent):
+    """노쇼 기록 → 당사자에게 벌금 고지 1회. 중복 기록은 무알림 (§24-1)."""
+    p = _board(crew)
+    client = crew["client"]
+    client.post(f"/assignments/{p['id']}/confirm", headers=_h(crew["moms"][0]))
+    sid = client.post(f"/assignments/{p['id']}/confirm", headers=_h(crew["moms"][1])).json()["session_id"]
+    sent.clear()
+    body = {"kind": "no_show", "offender_id": crew["owner"]}
+    res = client.post(f"/sessions/{sid}/incidents", json=body, headers=_h(crew["moms"][0])).json()
+    assert res["fine_krw"] == 10000
+    assert [x["to"] for x in sent] == [_tok(crew["owner"])]
+    client.post(f"/sessions/{sid}/incidents", json=body, headers=_h(crew["moms"][1]))  # 중복
+    assert len(sent) == 1
+    [badge] = client.get(f"/crews/{crew['crew_id']}/incidents", headers=_h(crew["owner"])).json()
+    assert badge["count"] == 1 and badge["user_id"] == crew["owner"]
+
+
 def test_register_token_upsert(ctx):
     client, TestSession = ctx
     u1 = client.post("/users", json={"name": "a"}).json()["id"]

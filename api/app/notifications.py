@@ -8,19 +8,23 @@
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.domain.models import (
     Assignment,
     AssignmentChild,
     CareSession,
+    Charter,
     Child,
     Crew,
     CrewMember,
     CrewStatus,
+    LedgerEntry,
     PushToken,
+    SessionIncident,
     Settlement,
+    SettlementMode,
     SettlementStatus,
 )
 from app.infra import push
@@ -109,6 +113,53 @@ def notify_declined(db: DbSession, assignment: Assignment, decliner_id: str) -> 
         "배정 후보가 거절됐어요",
         f"{assignment.date} {assignment.start_hour}~{assignment.end_hour}시 — 다른 후보를 확정하거나 다시 제안해주세요",
     )
+
+
+def notify_cancel(db: DbSession, session: CareSession, canceler_id: str) -> None:
+    """세션 취소 (P9) — 취소한 사람 제외 참여자 전원에게."""
+    targets = (
+        _assignment_guardians(db, session.assignment_id) | {session.caregiver_id}
+    ) - {canceler_id}
+    _send_to(
+        db, targets, "세션이 취소됐어요",
+        f"{session.date} {session.start_hour}~{session.end_hour}시 — 보드에서 다시 조율해주세요",
+    )
+
+
+def notify_incident(db: DbSession, incident: SessionIncident) -> None:
+    """벌금 자동 고지 (§24-1) — 사람이 악역이 되지 않게 앱이 말한다. 징수는 안 한다 (I5)."""
+    kind_ko = "노쇼" if str(incident.kind) == "no_show" else "급취소"
+    _send_to(
+        db, {incident.offender_id}, f"{kind_ko} 기록 안내",
+        f"크루 규약에 따라 벌금 {incident.fine_krw:,}원이 안내돼요 (앱은 징수하지 않아요)",
+    )
+
+
+ROTATION_BALANCE_THRESHOLD = 4  # §24-3 가정: 아이·시간. 전역 기본 — 추후 규약화 후보
+
+
+def notify_rotation_balance(db: DbSession) -> None:
+    """rotation 크루 균형 알림 (§24-3): 잔액 최대−최소 ≥ 임계면 교대 제안."""
+    for crew in db.scalars(select(Crew).where(Crew.status == CrewStatus.ACTIVE)).all():
+        charter = db.scalar(select(Charter).where(Charter.crew_id == crew.id))
+        if charter is None or charter.settlement_mode != SettlementMode.ROTATION:
+            continue
+        rows = db.execute(
+            select(LedgerEntry.user_id, func.sum(LedgerEntry.delta_child_hours))
+            .where(LedgerEntry.crew_id == crew.id)
+            .group_by(LedgerEntry.user_id)
+        ).all()
+        if not rows:
+            continue
+        vals = [int(v) for _, v in rows]
+        if max(vals) - min(vals) < ROTATION_BALANCE_THRESHOLD:
+            continue
+        members = db.scalars(select(CrewMember).where(CrewMember.crew_id == crew.id)).all()
+        _send_to(
+            db, {m.user_id for m in members},
+            f"{crew.name} 교대 균형",
+            "요즘 돌봄이 한쪽으로 몰렸어요 — 다음 주엔 교대해보면 어때요?",
+        )
 
 
 # --- 독촉·리마인드 (악역의 자동화) ---

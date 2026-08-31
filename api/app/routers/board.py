@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain import board_service as board
+from app.domain import incident_service
 from app.domain.crew_service import _require_member
+from app.domain.models import IncidentKind
 from app.domain.models import (
     Assignment,
     AssignmentChild,
@@ -110,6 +112,7 @@ def list_sessions(crew_id: str, user: User = Depends(get_current_user), db: Sess
             "start_hour": s.start_hour, "end_hour": s.end_hour,
             "handoff_started_at": s.handoff_started_at.isoformat() if s.handoff_started_at else None,
             "handoff_ended_at": s.handoff_ended_at.isoformat() if s.handoff_ended_at else None,
+            "canceled_at": s.canceled_at.isoformat() if s.canceled_at else None,
         }
         for s in rows
     ]
@@ -124,6 +127,8 @@ def handoff(session_id: str, action: str, user: User = Depends(get_current_user)
     if session is None:
         raise HTTPException(status_code=404)
     _require_member(db, session.crew_id, user.id)
+    if session.canceled_at is not None:
+        raise ValueError("취소된 세션에는 인계를 기록할 수 없다")
     if action == "start" and session.handoff_started_at is None:
         session.handoff_started_at = _now()
     elif action == "end" and session.handoff_ended_at is None:
@@ -133,6 +138,39 @@ def handoff(session_id: str, action: str, user: User = Depends(get_current_user)
         ledger_service.record_session_credits(db, session)
     db.flush()
     return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/cancel")
+def cancel_session(session_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """시작 전 세션 취소 (P9). 벌금 여부 판단은 사람 — 필요하면 인시던트로 기록한다."""
+    before = db.get(CareSession, session_id)
+    was_canceled = before is not None and before.canceled_at is not None
+    session = incident_service.cancel_session(db, session_id, user)
+    if not was_canceled:
+        notifications.notify_cancel(db, session, user.id)
+    return {"ok": True}
+
+
+class IncidentIn(BaseModel):
+    kind: IncidentKind
+    offender_id: str
+
+
+@router.post("/sessions/{session_id}/incidents")
+def report_incident(session_id: str, body: IncidentIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """노쇼·급취소 기록 (§24-1) — 판정은 사람, 벌금 고지는 앱이 대신한다."""
+    incident, created = incident_service.report_incident(
+        db, session_id, user, kind=body.kind, offender_id=body.offender_id
+    )
+    if created:
+        notifications.notify_incident(db, incident)
+    return {"id": incident.id, "fine_krw": incident.fine_krw}
+
+
+@router.get("/crews/{crew_id}/incidents")
+def crew_incidents(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """반복 가시화 배지 (§4-A) — 크루 멤버 한정 (I6)."""
+    return incident_service.incident_counts(db, crew_id, user)
 
 
 def _assignment_out(db: Session, a: Assignment) -> dict:

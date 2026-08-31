@@ -10,6 +10,7 @@ interface Settlement {
   from_user: string;
   to_user: string;
   amount_krw: number;
+  amount_credits: number; // 0 = 호스트 사례 (§24-2)
   status: string;
   unsettled: boolean;
 }
@@ -85,7 +86,8 @@ export default function LedgerScreen({ route }: any) {
       {settlements.map((s) => (
         <View key={s.id} style={ui.card}>
           <Text style={{ fontWeight: "700" }}>
-            {s.month} · {s.amount_krw.toLocaleString()}원 {s.unsettled ? "· 미정산" : "· 완료 ✓"}
+            {s.month} · {s.amount_krw.toLocaleString()}원
+            {s.amount_credits === 0 ? " · 호스트 사례" : ""} {s.unsettled ? "· 미정산" : "· 완료 ✓"}
           </Text>
           <Text style={ui.hint}>
             {s.from_user === myId ? "내가 보낼 돈" : s.to_user === myId ? "내가 받을 돈" : "다른 가정 간"}

@@ -116,4 +116,5 @@ export interface CareSession {
   end_hour: number;
   handoff_started_at: string | null;
   handoff_ended_at: string | null;
+  canceled_at: string | null;
 }

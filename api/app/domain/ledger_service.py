@@ -28,6 +28,8 @@ def record_session_credits(db: DbSession, session: CareSession) -> None:
 
     멱등: 같은 세션에 이미 기입돼 있으면 건너뜀 (기록은 소급 조작 불가).
     """
+    if session.canceled_at is not None:
+        return  # P9: 취소된 세션은 장부 대상이 아니다
     existing = db.scalar(
         select(LedgerEntry).where(LedgerEntry.session_id == session.id)
     )
@@ -123,6 +125,35 @@ def compute_settlement(db: DbSession, crew_id: str, month: str, requester: User)
             di += 1
         if c[1] == 0:
             ci += 1
+
+    # §24-2: 호스트 사례 — 완료 세션(취소 제외)마다 참여 가정 균등 분담(원 단위 절사),
+    # 돌봄자에게 가산. 크레딧 축과 별개(amount_credits=0 → 확정 시 장부 상쇄 없음).
+    if charter.host_fee_krw > 0:
+        sessions = db.scalars(
+            select(CareSession).where(
+                CareSession.crew_id == crew_id,
+                CareSession.date.like(f"{month}-%"),
+                CareSession.handoff_ended_at.is_not(None),
+                CareSession.canceled_at.is_(None),
+            )
+        ).all()
+        for s in sessions:
+            rows = db.scalars(
+                select(AssignmentChild).where(AssignmentChild.assignment_id == s.assignment_id)
+            ).all()
+            families = {db.get(Child, r.child_id).guardian_id for r in rows} - {s.caregiver_id}
+            share = charter.host_fee_krw // len(families) if families else 0
+            if share == 0:
+                continue
+            for g in families:
+                st = Settlement(
+                    crew_id=crew_id, month=month,
+                    from_user=g, to_user=s.caregiver_id,
+                    amount_krw=share, amount_credits=0,
+                )
+                db.add(st)
+                result.append(st)
+
     db.flush()
     return result
 
@@ -140,6 +171,9 @@ def confirm_settlement(db: DbSession, settlement_id: str, user: User) -> Settlem
     if settlement.status != SettlementStatus.CONFIRMED:
         settlement.status = SettlementStatus.CONFIRMED
         settlement.confirmed_at = _now()
+        if settlement.amount_credits == 0:
+            db.flush()
+            return settlement  # 호스트 사례 등 원화 전용 정산 — 크레딧 장부와 무관 (§24-2)
         # §22: 정산 확정 = 반대 부호 기입 — 정산된 몫을 장부에서 상쇄한다 (상쇄 쌍도 제로섬).
         # 감사 원칙 그대로: 기존 항목은 건드리지 않고 새 항목을 더할 뿐이다.
         db.add(

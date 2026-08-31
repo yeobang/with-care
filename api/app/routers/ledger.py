@@ -48,6 +48,7 @@ def _out(s: Settlement) -> dict:
         "from_user": s.from_user,
         "to_user": s.to_user,
         "amount_krw": s.amount_krw,
+        "amount_credits": s.amount_credits,  # 0 = 호스트 사례 등 원화 전용 (§24-2)
         "status": str(s.status),
         "unsettled": s.status != SettlementStatus.CONFIRMED,
     }

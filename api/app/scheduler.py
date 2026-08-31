@@ -42,5 +42,9 @@ def start_scheduler() -> BackgroundScheduler:
         _with_session(notifications.remind_weekly_board),
         "cron", day_of_week="sun", hour=18, minute=0,
     )
+    sched.add_job(  # §24-3: rotation 크루 교대 균형
+        _with_session(notifications.notify_rotation_balance),
+        "cron", day_of_week="sun", hour=18, minute=5,
+    )
     sched.start()
     return sched

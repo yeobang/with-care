@@ -184,10 +184,34 @@ export default function BoardScreen({ route }: any) {
             {s.date} {s.start_hour}시~{s.end_hour}시
           </Text>
           <Text style={ui.hint}>
-            인계 {s.handoff_started_at ? "시작됨" : "전"} · {s.handoff_ended_at ? "종료됨" : "진행 중"}
+            {s.canceled_at
+              ? "취소됨"
+              : `인계 ${s.handoff_started_at ? "시작됨" : "전"} · ${s.handoff_ended_at ? "종료됨" : "진행 중"}`}
           </Text>
           <View style={ui.row}>
-            {!s.handoff_started_at && (
+            {!s.canceled_at && !s.handoff_started_at && (
+              <TouchableOpacity
+                style={ui.smallBtn}
+                onPress={guard(() => api.post(`/sessions/${s.id}/cancel`))}
+              >
+                <Text style={ui.smallBtnText}>세션 취소</Text>
+              </TouchableOpacity>
+            )}
+            {!s.canceled_at && myId && myId !== s.caregiver_id && (
+              <TouchableOpacity
+                style={ui.smallBtn}
+                onPress={guard(async () => {
+                  await api.post(`/sessions/${s.id}/incidents`, {
+                    kind: "no_show",
+                    offender_id: s.caregiver_id,
+                  });
+                  Alert.alert("기록 완료", "규약의 벌금 안내를 앱이 대신 전했어요.");
+                })}
+              >
+                <Text style={ui.smallBtnText}>돌봄자 노쇼 기록</Text>
+              </TouchableOpacity>
+            )}
+            {!s.canceled_at && !s.handoff_started_at && (
               <TouchableOpacity
                 style={ui.smallBtn}
                 onPress={guard(() => api.post(`/sessions/${s.id}/handoff/start`))}
@@ -195,7 +219,7 @@ export default function BoardScreen({ route }: any) {
                 <Text style={ui.smallBtnText}>맡김 확인</Text>
               </TouchableOpacity>
             )}
-            {s.handoff_started_at && !s.handoff_ended_at && (
+            {!s.canceled_at && s.handoff_started_at && !s.handoff_ended_at && (
               <TouchableOpacity
                 style={ui.smallBtn}
                 onPress={guard(() => api.post(`/sessions/${s.id}/handoff/end`))}
@@ -203,9 +227,11 @@ export default function BoardScreen({ route }: any) {
                 <Text style={ui.smallBtnText}>돌려받음 확인</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={ui.smallBtn} onPress={() => pickPhoto(s.id)}>
-              <Text style={ui.smallBtnText}>📷 사진 올리기</Text>
-            </TouchableOpacity>
+            {!s.canceled_at && (
+              <TouchableOpacity style={ui.smallBtn} onPress={() => pickPhoto(s.id)}>
+                <Text style={ui.smallBtnText}>📷 사진 올리기</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={ui.row}>
             {(photos[s.id] ?? []).map((p) => (

@@ -214,6 +214,9 @@ class CareSession(Base):
     end_hour: Mapped[int] = mapped_column()
     handoff_started_at: Mapped[datetime | None] = mapped_column(default=None)
     handoff_ended_at: Mapped[datetime | None] = mapped_column(default=None)
+    # P9: 시작 전 취소 (시작 후 문제는 인시던트 기록으로)
+    canceled_at: Mapped[datetime | None] = mapped_column(default=None)
+    canceled_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
@@ -273,6 +276,34 @@ class Settlement(Base):
     status: Mapped[SettlementStatus] = mapped_column(String(10), default=SettlementStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(default=_now)
     confirmed_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
+# --- P9: 규약 집행 ---
+
+
+class IncidentKind(enum.StrEnum):
+    NO_SHOW = "no_show"
+    LATE_CANCEL = "late_cancel"
+
+
+class SessionIncident(Base):
+    """노쇼·급취소 기록 (§24-1): 판정은 사람, 고지는 앱.
+
+    append-only — 수정·삭제 없음 (소급 조작 불가, §4-A 기록 무결성).
+    벌금은 규약 스냅샷을 '고지'할 뿐 징수하지 않는다 (I5).
+    """
+
+    __tablename__ = "session_incidents"
+    __table_args__ = (UniqueConstraint("session_id", "offender_id", "kind"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    session_id: Mapped[str] = mapped_column(ForeignKey("care_sessions.id"))
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    reported_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    offender_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[IncidentKind] = mapped_column(String(12))
+    fine_krw: Mapped[int] = mapped_column()  # 기록 시점 규약(no_show_fine_krw) 스냅샷
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 # --- P7: 푸시 ---

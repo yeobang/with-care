@@ -226,20 +226,25 @@ def test_ledger_and_settlement_flow(client):
     assert bal[owner] == 4 and bal[mom_b] == -2 and bal[mom_c] == -2
     assert sum(bal.values()) == 0
 
-    # 월말 정산: B→오너 20000원, C→오너 20000원 (2크레딧×10000)
+    # 월말 정산: 크레딧 B→오너 20000, C→오너 20000 (2크레딧×10000)
+    # + 호스트 사례 (§24-2): 규약 기본 5000 ÷ 2가정 = 2500씩 → 총 4건
     rows = client.post(f"/crews/{crew_id}/settlements/2026-08/compute", headers=_h(owner)).json()
-    assert len(rows) == 2
-    assert all(r["to_user"] == owner and r["amount_krw"] == 20000 for r in rows)
+    credit_rows = [r for r in rows if r["amount_credits"] > 0]
+    host_rows = [r for r in rows if r["amount_credits"] == 0]
+    assert len(credit_rows) == 2
+    assert all(r["to_user"] == owner and r["amount_krw"] == 20000 for r in credit_rows)
+    assert len(host_rows) == 2
+    assert all(r["to_user"] == owner and r["amount_krw"] == 2500 for r in host_rows)
     # 멱등
     again = client.post(f"/crews/{crew_id}/settlements/2026-08/compute", headers=_h(owner)).json()
-    assert len(again) == 2
+    assert len(again) == 4
 
     # "받았어요"는 받는 사람만 (보낸 사람이 누르면 403)
-    target = rows[0]
+    target = credit_rows[0]
     assert client.post(f"/settlements/{target['id']}/received", headers=_h(target["from_user"])).status_code == 403
     res = client.post(f"/settlements/{target['id']}/received", headers=_h(owner)).json()
     assert res["status"] == "confirmed"
 
-    # 미정산 배지: 남은 1건
+    # 미정산 배지: 4건 중 1건 확정 → 남은 3건
     unsettled = [r for r in client.get(f"/crews/{crew_id}/settlements", headers=_h(owner)).json() if r["unsettled"]]
-    assert len(unsettled) == 1
+    assert len(unsettled) == 3
