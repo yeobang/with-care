@@ -26,10 +26,10 @@ app = FastAPI(
     description="모든 도메인 규칙(불변식 I1~I8)은 이 API에만 산다. 앱은 Supabase에 직접 쓰지 않는다.",
     lifespan=lifespan,
 )
-# dev: Expo 웹(8081)에서의 호출 허용. prod 오리진은 배포 시 확정
+# CORS 오리진은 환경변수로 (P11) — dev 기본: Expo 웹(8081)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8081"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )

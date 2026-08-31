@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     supabase_service_key: str = ""
     # P7: 독촉·리마인드 스케줄러 (테스트·마이그레이션에선 꺼짐이 기본)
     scheduler_enabled: bool = False
+    # P11: CORS 허용 오리진 (쉼표 구분). prod 배포 시 실제 도메인으로 교체
+    cors_origins: str = "http://localhost:8081"
 
 
 settings = Settings()
