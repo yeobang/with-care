@@ -67,6 +67,24 @@ def propose_assignments(db: DbSession, crew_id: str, user: User, date: str) -> l
             BoardSlot.crew_id == crew_id, BoardSlot.date == date, BoardSlot.kind == SlotKind.AVAILABLE
         )
     ).all()
+
+    # 멱등(재호출·연타): 아무 가정도 확정하지 않은 PROPOSED 후보는 정리 후 재생성한다.
+    # 확정 탭이 하나라도 찍힌 후보는 보존 — I4의 탭을 시스템이 소급 소실시키지 않는다.
+    kept_keys: set[tuple] = set()
+    for a in db.scalars(
+        select(Assignment).where(Assignment.crew_id == crew_id, Assignment.date == date)
+    ).all():
+        rows = db.scalars(
+            select(AssignmentChild).where(AssignmentChild.assignment_id == a.id)
+        ).all()
+        if a.status == ProposalStatus.PROPOSED and not any(r.guardian_confirmed for r in rows):
+            for r in rows:
+                db.delete(r)
+            db.delete(a)
+        else:
+            kept_keys.add((a.caregiver_id, a.start_hour, a.end_hour, frozenset(r.child_id for r in rows)))
+    db.flush()
+
     proposals: list[Assignment] = []
     for avail in avails:
         covered = [
@@ -78,6 +96,8 @@ def propose_assignments(db: DbSession, crew_id: str, user: User, date: str) -> l
             continue
         start = min(n.start_hour for n in covered)
         end = max(n.end_hour for n in covered)
+        if (avail.user_id, start, end, frozenset(n.child_id for n in covered)) in kept_keys:
+            continue  # 보존된 후보와 동일 — 중복 생성 금지
         assignment = Assignment(
             crew_id=crew_id, caregiver_id=avail.user_id,
             date=date, start_hour=start, end_hour=end,
@@ -101,6 +121,12 @@ def confirm_assignment(db: DbSession, assignment_id: str, guardian: User) -> Car
         raise ValueError("존재하지 않는 배정 후보")
     _require_member(db, assignment.crew_id, guardian.id)
     _require_consent(db, assignment.crew_id, guardian.id)
+
+    if assignment.status == ProposalStatus.CONFIRMED:
+        # 재탭 멱등: 이미 확정된 배정은 기존 세션을 그대로 돌려준다 (중복 세션 생성 금지)
+        return db.scalar(select(CareSession).where(CareSession.assignment_id == assignment.id))
+    if assignment.status == ProposalStatus.DECLINED:
+        raise ValueError("거절된 배정 후보는 확정할 수 없다")
 
     rows = db.scalars(
         select(AssignmentChild).where(AssignmentChild.assignment_id == assignment_id)

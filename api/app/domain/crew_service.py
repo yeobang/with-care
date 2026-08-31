@@ -47,6 +47,13 @@ def join_crew(db: DbSession, user: User, invite_token: str) -> CrewMember:
     invite = db.get(Invite, invite_token)
     if invite is None or invite.used_by is not None:
         raise errors.HandoffGateViolation("유효한 초대 없이는 크루에 합류할 수 없다 (I1)")
+    already = db.scalar(
+        select(CrewMember).where(
+            CrewMember.crew_id == invite.crew_id, CrewMember.user_id == user.id
+        )
+    )
+    if already is not None:
+        raise ValueError("이미 이 크루의 멤버다")  # 초대장은 소모하지 않는다
     invite.used_by = user.id
     member = CrewMember(crew_id=invite.crew_id, user_id=user.id)
     db.add(member)
@@ -68,15 +75,17 @@ def submit_consent(
     _require_member(db, crew_id, user.id)
     if not (liability_ack and photo_consent and guardian_consent):
         raise errors.ConsentMissing("포괄 합의는 부분 동의로 성립하지 않는다 (I2)")
-    consent = Consent(
-        crew_id=crew_id,
-        user_id=user.id,
-        liability_ack=liability_ack,
-        photo_consent=photo_consent,
-        guardian_consent=guardian_consent,
-        consented_at=_now(),
+    # 재제출 = 기존 행 갱신 — 아이 프로필 변경 후 재동의(§19-5)가 이 경로를 쓴다
+    consent = db.scalar(
+        select(Consent).where(Consent.crew_id == crew_id, Consent.user_id == user.id)
     )
-    db.add(consent)
+    if consent is None:
+        consent = Consent(crew_id=crew_id, user_id=user.id)
+        db.add(consent)
+    consent.liability_ack = liability_ack
+    consent.photo_consent = photo_consent
+    consent.guardian_consent = guardian_consent
+    consent.consented_at = _now()
     db.flush()
     return consent
 
