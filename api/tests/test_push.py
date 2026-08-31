@@ -180,6 +180,32 @@ def test_dead_tokens_cleaned(ctx, crew, monkeypatch):
     assert _tok(crew["owner"]) in remaining  # 발송된 적 없는 토큰은 유지
 
 
+def test_gap_rerequest_pushes_to_others(crew, sent):
+    """빈칸 재요청은 요청자 제외 크루 전원에게 (P8)."""
+    client = crew["client"]
+    m = crew["moms"][0]
+    client.post(
+        f"/crews/{crew['crew_id']}/slots",
+        json={"kind": "need", "date": "2026-09-08", "start_hour": 15, "end_hour": 17, "child_id": crew["kids"][m]},
+        headers=_h(m),
+    )
+    sent.clear()
+    res = client.post(f"/crews/{crew['crew_id']}/board/rerequest?date=2026-09-08", headers=_h(m)).json()
+    assert res["gaps"] == 1
+    assert {x["to"] for x in sent} == {_tok(crew["owner"]), _tok(crew["moms"][1])}
+
+
+def test_decline_notifies_others_once(crew, sent):
+    p = _board(crew)
+    client = crew["client"]
+    sent.clear()
+    client.post(f"/assignments/{p['id']}/decline", headers=_h(crew["moms"][0]))
+    assert {x["to"] for x in sent} == {_tok(crew["owner"]), _tok(crew["moms"][1])}
+    n = len(sent)
+    client.post(f"/assignments/{p['id']}/decline", headers=_h(crew["moms"][0]))  # 재탭
+    assert len(sent) == n
+
+
 def test_register_token_upsert(ctx):
     client, TestSession = ctx
     u1 = client.post("/users", json={"name": "a"}).json()["id"]

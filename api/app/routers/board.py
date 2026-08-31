@@ -76,6 +76,30 @@ def confirm(assignment_id: str, user: User = Depends(get_current_user), db: Sess
     return {"session_id": session.id if session else None}
 
 
+@router.get("/crews/{crew_id}/board/gaps")
+def gaps(crew_id: str, date: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return board.find_gaps(db, crew_id, user, date)
+
+
+@router.post("/crews/{crew_id}/board/rerequest")
+def rerequest(crew_id: str, date: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """빈칸 재요청 — 크루에 조르기 푸시 (P8 폴백 1단계. 2단계 시터 공구는 P10)."""
+    found = board.find_gaps(db, crew_id, user, date)
+    if found:
+        notifications.notify_gap_rerequest(db, crew_id, found, user.id)
+    return {"gaps": len(found)}
+
+
+@router.post("/assignments/{assignment_id}/decline")
+def decline(assignment_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    before = db.get(Assignment, assignment_id)
+    was_declined = before is not None and str(before.status) == "declined"
+    assignment = board.decline_assignment(db, assignment_id, user)
+    if not was_declined:
+        notifications.notify_declined(db, assignment, user.id)  # 재탭 멱등 경로는 무알림
+    return {"status": str(assignment.status)}
+
+
 @router.get("/crews/{crew_id}/sessions")
 def list_sessions(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _require_member(db, crew_id, user.id)

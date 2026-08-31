@@ -10,6 +10,13 @@ interface Photo {
   url: string;
 }
 
+interface Gap {
+  guardian_id: string;
+  child_id: string;
+  start_hour: number;
+  end_hour: number;
+}
+
 const HOURS = [13, 14, 15, 16, 17, 18, 19];
 
 function nextMonday(): string {
@@ -27,6 +34,7 @@ export default function BoardScreen({ route }: any) {
   const [proposals, setProposals] = useState<Assignment[]>([]);
   const [sessions, setSessions] = useState<CareSession[]>([]);
   const [photos, setPhotos] = useState<Record<string, Photo[]>>({});
+  const [gaps, setGaps] = useState<Gap[]>([]);
   const [mode, setMode] = useState<"available" | "need">("available");
 
   useEffect(() => {
@@ -37,6 +45,7 @@ export default function BoardScreen({ route }: any) {
   const load = useCallback(() => {
     api.get<Slot[]>(`/crews/${crewId}/board?date=${date}`).then(setSlots).catch(() => {});
     api.get<Assignment[]>(`/crews/${crewId}/proposals?date=${date}`).then(setProposals).catch(() => {});
+    api.get<Gap[]>(`/crews/${crewId}/board/gaps?date=${date}`).then(setGaps).catch(() => {});
     api
       .get<CareSession[]>(`/crews/${crewId}/sessions`)
       .then(async (list) => {
@@ -121,6 +130,23 @@ export default function BoardScreen({ route }: any) {
         <Text style={ui.primaryBtnText}>배정 후보 만들기</Text>
       </TouchableOpacity>
 
+      {gaps.length > 0 && (
+        <View style={[ui.card, { borderColor: "#f0c" }]}>
+          <Text style={{ fontWeight: "700" }}>빈칸 {gaps.length}건</Text>
+          {gaps.map((g, i) => (
+            <Text key={i} style={ui.hint}>
+              {g.start_hour}시~{g.end_hour}시 · 돌봄자가 없어요
+            </Text>
+          ))}
+          <TouchableOpacity
+            style={ui.smallBtn}
+            onPress={guard(() => api.post(`/crews/${crewId}/board/rerequest?date=${date}`))}
+          >
+            <Text style={ui.smallBtnText}>크루에 재요청 보내기</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <Text style={ui.sectionTitle}>배정 후보 (전 가정 확정 시 세션 생성)</Text>
       {proposals.map((p) => (
         <View key={p.id} style={ui.card}>
@@ -133,12 +159,20 @@ export default function BoardScreen({ route }: any) {
             </Text>
           ))}
           {p.status === "proposed" && (
-            <TouchableOpacity
-              style={ui.smallBtn}
-              onPress={guard(() => api.post(`/assignments/${p.id}/confirm`))}
-            >
-              <Text style={ui.smallBtnText}>내 아이 확정 탭</Text>
-            </TouchableOpacity>
+            <View style={ui.row}>
+              <TouchableOpacity
+                style={ui.smallBtn}
+                onPress={guard(() => api.post(`/assignments/${p.id}/confirm`))}
+              >
+                <Text style={ui.smallBtnText}>내 아이 확정 탭</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={ui.smallBtn}
+                onPress={guard(() => api.post(`/assignments/${p.id}/decline`))}
+              >
+                <Text style={ui.smallBtnText}>거절</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       ))}

@@ -29,6 +29,36 @@ from app.domain.models import (
 MAX_PRESCHOOLERS_PER_CAREGIVER = 4  # I3: 영유아보육법 "상시 5인" 선 아래 (docs/00-ideation.md §18)
 
 
+def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """인접(끝==시작)·중첩 구간 병합 — 1시간 슬롯 여러 개 = 연속 가능시간 (P8)."""
+    out: list[list[int]] = []
+    for st, en in sorted(intervals):
+        if out and st <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], en)
+        else:
+            out.append([st, en])
+    return [(a, b) for a, b in out]
+
+
+def _need_units(needs: list[BoardSlot]) -> list[tuple[str, str, int, int]]:
+    """(guardian_id, child_id, start, end) — 아이별로 병합된 '필요' 구간."""
+    by_child: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for n in needs:
+        by_child.setdefault((n.user_id, n.child_id), []).append((n.start_hour, n.end_hour))
+    return [
+        (guardian, child, st, en)
+        for (guardian, child), ivs in by_child.items()
+        for st, en in _merge_intervals(ivs)
+    ]
+
+
+def _avail_by_caregiver(avails: list[BoardSlot]) -> dict[str, list[tuple[int, int]]]:
+    by_user: dict[str, list[tuple[int, int]]] = {}
+    for a in avails:
+        by_user.setdefault(a.user_id, []).append((a.start_hour, a.end_hour))
+    return {uid: _merge_intervals(ivs) for uid, ivs in by_user.items()}
+
+
 def add_slot(
     db: DbSession, crew_id: str, user: User, *, kind: SlotKind,
     date: str, start_hour: int, end_hour: int, child_id: str | None = None,
@@ -85,30 +115,95 @@ def propose_assignments(db: DbSession, crew_id: str, user: User, date: str) -> l
             kept_keys.add((a.caregiver_id, a.start_hour, a.end_hour, frozenset(r.child_id for r in rows)))
     db.flush()
 
+    # P8: 인접·중첩 슬롯 병합 후 매칭 (1시간 슬롯 여러 개 = 연속 가능시간)
+    units = _need_units(needs)
     proposals: list[Assignment] = []
-    for avail in avails:
-        covered = [
-            n for n in needs
-            if n.user_id != avail.user_id
-            and n.start_hour >= avail.start_hour and n.end_hour <= avail.end_hour
-        ]
-        if not covered:
-            continue
-        start = min(n.start_hour for n in covered)
-        end = max(n.end_hour for n in covered)
-        if (avail.user_id, start, end, frozenset(n.child_id for n in covered)) in kept_keys:
-            continue  # 보존된 후보와 동일 — 중복 생성 금지
-        assignment = Assignment(
-            crew_id=crew_id, caregiver_id=avail.user_id,
-            date=date, start_hour=start, end_hour=end,
-        )
-        db.add(assignment)
-        db.flush()
-        for n in covered:
-            db.add(AssignmentChild(assignment_id=assignment.id, child_id=n.child_id))
-        proposals.append(assignment)
+    for caregiver_id, merged in _avail_by_caregiver(avails).items():
+        for a_start, a_end in merged:
+            covered = [
+                u for u in units
+                if u[0] != caregiver_id and u[2] >= a_start and u[3] <= a_end
+            ]
+            if not covered:
+                continue
+            start = min(u[2] for u in covered)
+            end = max(u[3] for u in covered)
+            child_ids = {u[1] for u in covered}
+            if (caregiver_id, start, end, frozenset(child_ids)) in kept_keys:
+                continue  # 보존된 후보와 동일 — 중복 생성 금지
+            assignment = Assignment(
+                crew_id=crew_id, caregiver_id=caregiver_id,
+                date=date, start_hour=start, end_hour=end,
+            )
+            db.add(assignment)
+            db.flush()
+            for cid in child_ids:
+                db.add(AssignmentChild(assignment_id=assignment.id, child_id=cid))
+            proposals.append(assignment)
     db.flush()
     return proposals
+
+
+def find_gaps(db: DbSession, crew_id: str, user: User, date: str) -> list[dict]:
+    """빈칸 감지 (P8): 어떤 타인 돌봄자의 병합 가능구간에도 완전히 들어가지 않는 필요 구간.
+
+    부분 커버도 빈칸으로 본다 — 반쪽 돌봄은 성립하지 않는다는 보수적 기준.
+    (폴백 2단계 '시터 공구 제안'은 P10에서 이 결과를 입력으로 쓴다.)
+    """
+    _require_member(db, crew_id, user.id)
+    _require_active(db, crew_id)
+    needs = db.scalars(
+        select(BoardSlot).where(
+            BoardSlot.crew_id == crew_id, BoardSlot.date == date, BoardSlot.kind == SlotKind.NEED
+        )
+    ).all()
+    avails = db.scalars(
+        select(BoardSlot).where(
+            BoardSlot.crew_id == crew_id, BoardSlot.date == date, BoardSlot.kind == SlotKind.AVAILABLE
+        )
+    ).all()
+    by_caregiver = _avail_by_caregiver(avails)
+    gaps = []
+    for guardian, child, st, en in _need_units(needs):
+        covered = any(
+            cg != guardian and a_start <= st and en <= a_end
+            for cg, merged in by_caregiver.items()
+            for a_start, a_end in merged
+        )
+        if not covered:
+            gaps.append(
+                {"guardian_id": guardian, "child_id": child, "start_hour": st, "end_hour": en}
+            )
+    return gaps
+
+
+def decline_assignment(db: DbSession, assignment_id: str, user: User) -> Assignment:
+    """배정 후보 거절 (I4의 다른 반쪽 — 거절도 사람의 명시적 탭).
+
+    자기 아이가 포함된 가정 또는 돌봄자 본인만 거절할 수 있다. 거절은 후보 전체를
+    무효화한다 (부분 거절 없음 — 후보는 다시 제안으로 재구성).
+    확정된 배정의 취소(노쇼·급취소)는 P9 규약 집행 흐름에서 다룬다.
+    """
+    assignment = db.get(Assignment, assignment_id)
+    if assignment is None:
+        raise ValueError("존재하지 않는 배정 후보")
+    _require_member(db, assignment.crew_id, user.id)
+    _require_consent(db, assignment.crew_id, user.id)
+    if assignment.status == ProposalStatus.DECLINED:
+        return assignment  # 재탭 멱등
+    if assignment.status == ProposalStatus.CONFIRMED:
+        raise ValueError("이미 확정된 배정은 거절할 수 없다 (취소 흐름은 별도)")
+    rows = db.scalars(
+        select(AssignmentChild).where(AssignmentChild.assignment_id == assignment_id)
+    ).all()
+    involved = user.id == assignment.caregiver_id or any(
+        db.get(Child, r.child_id).guardian_id == user.id for r in rows
+    )
+    if not involved:
+        raise errors.HumanChoiceViolation("자기 아이가 포함된 후보 또는 자기 후보만 거절할 수 있다 (I4)")
+    assignment.status = ProposalStatus.DECLINED
+    db.flush()
+    return assignment
 
 
 def confirm_assignment(db: DbSession, assignment_id: str, guardian: User) -> CareSession | None:

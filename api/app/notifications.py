@@ -85,6 +85,32 @@ def notify_photo(db: DbSession, session: CareSession, uploader_id: str) -> None:
     _send_to(db, targets, "사진이 도착했어요", "오늘 돌봄 사진을 확인해보세요")
 
 
+def notify_gap_rerequest(db: DbSession, crew_id: str, gaps: list[dict], requester_id: str) -> None:
+    """빈칸 재요청 (P8) — 크루 전체에 '조르기'. 요청일 뿐 배정이 아니다 (I4)."""
+    members = db.scalars(
+        select(CrewMember).where(CrewMember.crew_id == crew_id)
+    ).all()
+    _send_to(
+        db,
+        {m.user_id for m in members} - {requester_id},
+        "돌봄 빈칸 재요청",
+        f"채워지지 않은 돌봄 {len(gaps)}건 — 가능한 시간을 열어주실 수 있나요?",
+    )
+
+
+def notify_declined(db: DbSession, assignment: Assignment, decliner_id: str) -> None:
+    """후보 거절 (P8) — 관련 가정·돌봄자에게 (거절한 사람 제외)."""
+    targets = (
+        _assignment_guardians(db, assignment.id) | {assignment.caregiver_id}
+    ) - {decliner_id}
+    _send_to(
+        db,
+        targets,
+        "배정 후보가 거절됐어요",
+        f"{assignment.date} {assignment.start_hour}~{assignment.end_hour}시 — 다른 후보를 확정하거나 다시 제안해주세요",
+    )
+
+
 # --- 독촉·리마인드 (악역의 자동화) ---
 
 
