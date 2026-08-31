@@ -238,6 +238,7 @@ class LedgerEntry(Base):
 
     I5: 크레딧은 비화폐·환급 불가. 이 테이블은 기록일 뿐 어떤 이체도 실행하지 않는다.
     감사 원칙: 항목은 수정·삭제하지 않는다 (정정은 반대 부호 항목 추가로).
+    항목의 출처는 둘 중 하나 (§22): 세션(session_id) 또는 정산 확정의 상쇄(settlement_id).
     """
 
     __tablename__ = "ledger_entries"
@@ -245,7 +246,8 @@ class LedgerEntry(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    session_id: Mapped[str] = mapped_column(ForeignKey("care_sessions.id"))
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("care_sessions.id"), default=None)
+    settlement_id: Mapped[str | None] = mapped_column(ForeignKey("settlements.id"), default=None)
     delta_child_hours: Mapped[int] = mapped_column()  # 돌봄자 양수, 맡긴 가정 음수
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
@@ -266,6 +268,8 @@ class Settlement(Base):
     from_user: Mapped[str] = mapped_column(ForeignKey("users.id"))
     to_user: Mapped[str] = mapped_column(ForeignKey("users.id"))
     amount_krw: Mapped[int] = mapped_column()
+    # §22-2: 상쇄는 제안 시점의 크레딧으로 — 규약 단가가 그 사이 바뀌어도 정확
+    amount_credits: Mapped[int] = mapped_column(default=0)
     status: Mapped[SettlementStatus] = mapped_column(String(10), default=SettlementStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(default=_now)
     confirmed_at: Mapped[datetime | None] = mapped_column(default=None)

@@ -89,6 +89,17 @@ def compute_settlement(db: DbSession, crew_id: str, month: str, requester: User)
         return []  # rotation/none 크루는 기록만 (§21)
 
     bal = balances(db, crew_id, requester)
+    # §22-3: 미확정(PENDING) 정산 몫은 차감 — 이미 제안된 몫을 다시 제안하지 않는다.
+    # (확정된 몫은 confirm_settlement의 상쇄 기입으로 이미 잔액에 반영돼 있다.)
+    pending = db.scalars(
+        select(Settlement).where(
+            Settlement.crew_id == crew_id, Settlement.status == SettlementStatus.PENDING
+        )
+    ).all()
+    for p in pending:
+        bal[p.from_user] = bal.get(p.from_user, 0) + p.amount_credits
+        bal[p.to_user] = bal.get(p.to_user, 0) - p.amount_credits
+
     debtors = sorted([(u, -b) for u, b in bal.items() if b < 0], key=lambda x: -x[1])
     creditors = sorted([(u, b) for u, b in bal.items() if b > 0], key=lambda x: -x[1])
     result: list[Settlement] = []
@@ -102,6 +113,7 @@ def compute_settlement(db: DbSession, crew_id: str, month: str, requester: User)
             crew_id=crew_id, month=month,
             from_user=d[0], to_user=c[0],
             amount_krw=credits * charter.credit_price_krw,
+            amount_credits=credits,
         )
         db.add(settlement)
         result.append(settlement)
@@ -128,5 +140,19 @@ def confirm_settlement(db: DbSession, settlement_id: str, user: User) -> Settlem
     if settlement.status != SettlementStatus.CONFIRMED:
         settlement.status = SettlementStatus.CONFIRMED
         settlement.confirmed_at = _now()
+        # §22: 정산 확정 = 반대 부호 기입 — 정산된 몫을 장부에서 상쇄한다 (상쇄 쌍도 제로섬).
+        # 감사 원칙 그대로: 기존 항목은 건드리지 않고 새 항목을 더할 뿐이다.
+        db.add(
+            LedgerEntry(
+                crew_id=settlement.crew_id, user_id=settlement.from_user,
+                settlement_id=settlement.id, delta_child_hours=settlement.amount_credits,
+            )
+        )
+        db.add(
+            LedgerEntry(
+                crew_id=settlement.crew_id, user_id=settlement.to_user,
+                settlement_id=settlement.id, delta_child_hours=-settlement.amount_credits,
+            )
+        )
         db.flush()
     return settlement
