@@ -1,6 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "./supabase";
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+
+/** P6: Supabase 세션이 있으면 Bearer JWT, 없으면 dev 헤더(X-User-Id) 폴백. */
+async function authHeaders(): Promise<Record<string, string>> {
+  if (supabase) {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) return { Authorization: `Bearer ${token}` };
+  }
+  const userId = await AsyncStorage.getItem("userId");
+  return userId ? { "X-User-Id": userId } : {};
+}
 
 export class ApiError extends Error {
   constructor(
@@ -13,12 +25,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const userId = await AsyncStorage.getItem("userId");
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(userId ? { "X-User-Id": userId } : {}),
+      ...(await authHeaders()),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -35,7 +46,6 @@ export const api = {
 };
 
 export async function uploadSessionPhoto(sessionId: string, uri: string): Promise<void> {
-  const userId = await AsyncStorage.getItem("userId");
   const form = new FormData();
   if (uri.startsWith("data:") || uri.startsWith("blob:")) {
     // 웹: picker가 data/blob URI를 줌
@@ -47,7 +57,7 @@ export async function uploadSessionPhoto(sessionId: string, uri: string): Promis
   }
   const res = await fetch(`${BASE}/sessions/${sessionId}/photos`, {
     method: "POST",
-    headers: userId ? { "X-User-Id": userId } : {},
+    headers: await authHeaders(),
     body: form,
   });
   if (!res.ok) {

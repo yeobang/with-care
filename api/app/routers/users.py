@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.deps import get_current_user, get_db
 from app.domain import crew_service as svc
 from app.domain.models import Child, User
+from app.infra import auth_jwt, identity
 
 router = APIRouter(tags=["users"])
 
@@ -21,9 +23,25 @@ class UserOut(BaseModel):
 
 
 @router.post("/users", response_model=UserOut)
-def signup(body: SignupIn, db: Session = Depends(get_db)) -> User:
-    # dev: 즉시 인증 처리. TODO(P6): PASS 본인인증 연동 후 verified는 그 결과로만 설정
-    user = User(name=body.name, identity_verified=True)
+def signup(
+    body: SignupIn,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> User:
+    """가입 = Supabase Auth 계정(JWT sub)에 프로필 행 생성. 본인인증은 별도 단계.
+
+    dev 한정: 토큰 없이도 가입 가능 (X-User-Id 흐름·테스트용).
+    """
+    if authorization and authorization.lower().startswith("bearer "):
+        claims = auth_jwt.verify(authorization[7:])
+        existing = db.get(User, claims["sub"])
+        if existing is not None:
+            return existing  # 재가입 멱등
+        user = User(id=claims["sub"], name=body.name, identity_verified=False)
+    elif settings.env == "dev":
+        user = User(name=body.name, identity_verified=False)
+    else:
+        raise HTTPException(status_code=401, detail="Bearer 토큰 필요")
     db.add(user)
     db.flush()
     return user
@@ -31,6 +49,18 @@ def signup(body: SignupIn, db: Session = Depends(get_db)) -> User:
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)) -> User:
+    return user
+
+
+@router.post("/identity/verify", response_model=UserOut)
+def identity_verify(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    """본인인증 (I1의 실물 관문). 현재는 스텁 어댑터 — PASS류 확보 시 어댑터만 교체."""
+    if not identity.get_verifier().verify(user.id, user.name):
+        raise HTTPException(status_code=403, detail="본인인증 실패")
+    user.identity_verified = True
+    db.flush()
     return user
 
 

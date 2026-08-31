@@ -9,6 +9,7 @@ import HomeScreen from "./src/screens/HomeScreen";
 import LedgerScreen from "./src/screens/LedgerScreen";
 import InviteScreen from "./src/screens/InviteScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import { supabase } from "./src/supabase";
 
 const Stack = createNativeStackNavigator();
 
@@ -29,10 +30,16 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("userId").then((id) => {
-      setLoggedIn(!!id);
+    (async () => {
+      let ok = false;
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        ok = !!data.session;
+      }
+      if (!ok) ok = !!(await AsyncStorage.getItem("userId")); // dev 헤더 폴백
+      setLoggedIn(ok);
       setReady(true);
-    });
+    })();
   }, []);
 
   if (!ready) return null;

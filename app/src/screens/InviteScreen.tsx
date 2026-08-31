@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { api } from "../api";
+import { supabase } from "../supabase";
 import { ui } from "../ui";
 
 interface Preview {
@@ -28,9 +29,15 @@ export default function InviteScreen({ route, navigation }: any) {
   const join = async () => {
     try {
       if (!loggedIn) {
+        if (supabase) {
+          // 실인증 모드: 초대장을 두고 로그인부터 (OTP 후 다시 이 링크로)
+          navigation.navigate("Login");
+          return;
+        }
         if (!name.trim()) return;
         const user = await api.post<{ id: string }>("/users", { name: name.trim() });
         await AsyncStorage.setItem("userId", user.id);
+        await api.post("/identity/verify"); // dev: 스텁 본인인증
       }
       const crew = await api.post<{ id: string; name: string }>(`/invites/${token}/join`);
       navigation.reset({
@@ -65,7 +72,7 @@ export default function InviteScreen({ route, navigation }: any) {
         </Text>
       ) : (
         <>
-          {!loggedIn && (
+          {!loggedIn && !supabase && (
             <TextInput
               style={[ui.input, { width: "100%" }]}
               placeholder="이름을 입력하면 바로 합류돼요"

@@ -43,9 +43,18 @@ def _h(user_id: str) -> dict:
     return {"X-User-Id": user_id}
 
 
+def _signup(client: TestClient, name: str) -> str:
+    """가입 + 본인인증(스텁) — P6부터 가입만으로는 verified가 아니다."""
+    uid = client.post("/users", json={"name": name}).json()["id"]
+    assert client.post("/identity/verify", headers=_h(uid)).status_code == 200
+    return uid
+
+
 def test_full_week_flow(client):
     # 가입 (3가구)
     users = [client.post("/users", json={"name": f"가구{i}"}).json() for i in range(3)]
+    for _u in users:
+        assert client.post("/identity/verify", headers=_h(_u["id"])).status_code == 200
     owner, mom_b, mom_c = (u["id"] for u in users)
 
     # 크루 생성 → 초대 → 합류
@@ -110,7 +119,7 @@ def test_full_week_flow(client):
     assert session["handoff_started_at"] and session["handoff_ended_at"]
 
     # I6: 크루 밖 사용자는 아무것도 못 본다
-    outsider = client.post("/users", json={"name": "외부인"}).json()["id"]
+    outsider = _signup(client, "외부인")
     res = client.get(f"/crews/{crew_id}/sessions", headers=_h(outsider))
     assert res.status_code == 403 and res.json()["invariant"] == "I6"
 
@@ -125,7 +134,7 @@ def test_session_photos_flow(client, monkeypatch):
     )
 
     # 최소 흐름으로 세션 하나 생성
-    users = [client.post("/users", json={"name": f"u{i}"}).json()["id"] for i in range(2)]
+    users = [_signup(client, f"u{i}") for i in range(2)]
     owner, mom = users
     crew_id = client.post("/crews", json={"name": "포토크루"}, headers=_h(owner)).json()["id"]
     token = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
@@ -161,7 +170,7 @@ def test_session_photos_flow(client, monkeypatch):
     assert len(uploaded) == 1
 
     # I6: 외부인은 업로드도 조회도 불가
-    outsider = client.post("/users", json={"name": "외부인"}).json()["id"]
+    outsider = _signup(client, "외부인")
     assert client.get(f"/sessions/{session_id}/photos", headers=_h(outsider)).status_code == 403
     assert client.post(
         f"/sessions/{session_id}/photos",
@@ -172,7 +181,7 @@ def test_session_photos_flow(client, monkeypatch):
 
 def test_ledger_and_settlement_flow(client):
     """세션 종료 → 장부 기입(아이·시간 제로섬) → 월말 정산 계산 → 받았어요 확인."""
-    users = [client.post("/users", json={"name": f"L{i}"}).json()["id"] for i in range(3)]
+    users = [_signup(client, f"L{i}") for i in range(3)]
     owner, mom_b, mom_c = users
     crew_id = client.post("/crews", json={"name": "장부크루"}, headers=_h(owner)).json()["id"]
     for uid in (mom_b, mom_c):
