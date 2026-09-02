@@ -36,7 +36,7 @@
 
 ## 현재 단계
 
-- **P0~P5 완료 + 완제품 직행 결정(§23, 2026-08-31)** — 검증 게이트 없이 P6~P11 연속 진행 ([docs/03-dev-plan.md](docs/03-dev-plan.md))
+- **P0~P10 완료 + P11 호스팅 배포 완료(2026-09-02)** — API https://with-care-api.fly.dev · 웹 현관 https://with-care-web.fly.dev. 잔여: EAS/스토어·PASS·법률 게이트 ([docs/03-dev-plan.md](docs/03-dev-plan.md))
 - 로드맵: P6 실인증 → P7 푸시 → P8 보드 완성(빈칸 폴백·슬롯 병합) → P9 규약 집행(노쇼·벌금) → P10 시터 트랙 → P11 배포·운영
 - 스택: **Expo RN(TS) 앱 + Expo Web 현관 + FastAPI(Python) + Supabase(인프라만)**
 - 경계 룰: 도메인 규칙(I1~I8)은 FastAPI에만. 앱은 Supabase 직접 쓰기 금지, 모든 쓰기는 API 경유
