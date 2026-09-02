@@ -1,0 +1,5 @@
+# with-care 웹 현관 (정적, P11) — 빌드는 배포 스크립트에서 `expo export` 후 dist/ 를 복사
+FROM nginx:alpine
+COPY dist /usr/share/nginx/html
+COPY nginx.web.conf /etc/nginx/conf.d/default.conf
+EXPOSE 8080

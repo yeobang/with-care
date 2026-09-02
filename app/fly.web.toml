@@ -1,0 +1,17 @@
+# with-care 웹 현관 — Fly.io 정적 호스팅 (P11)
+app = "with-care-web"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "Dockerfile.web"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"   # 정적 페이지 — 잠들어도 무방 (첫 요청 시 기동)
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

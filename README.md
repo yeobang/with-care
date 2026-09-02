@@ -55,3 +55,9 @@ prod(`ENV=prod`)에서는 JWT만 허용된다.
   세션 목록의 사진 서명 URL 발급(일괄화 완료, 페이지네이션은 미도입).
 - 범위 밖(만들지 않음): 자유 채팅, 동네 커뮤니티, 병상보육, 크레딧 현금화, GPS 추적,
   0~2세 세션, 광고.
+
+## 배포 (P11 — Fly.io)
+
+- API: https://with-care-api.fly.dev (nrt, `ENV=prod` — JWT 전용, release에서 마이그레이션 자동)
+- 웹 현관: https://with-care-web.fly.dev (초대 링크: `/invite/<토큰>`)
+- 재배포: `fly auth login` 후 `scripts/deploy.sh [api|web|all]`

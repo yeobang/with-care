@@ -1,0 +1,26 @@
+# with-care API — Fly.io (P11)
+# 시크릿(DATABASE_URL, SUPABASE_SERVICE_KEY)은 fly secrets로만 — 이 파일에 넣지 않는다.
+app = "with-care-api"
+primary_region = "nrt"  # 도쿄 — Supabase 프로젝트와 동일 리전
+
+[build]
+
+[env]
+  ENV = "prod"                 # 배포 게이트: JWT 인증만 허용 (dev 헤더 차단)
+  SCHEDULER_ENABLED = "true"   # 독촉·리마인드 (KST cron)
+  SUPABASE_URL = "https://knfwblfrmpochzaarvtq.supabase.co"
+  # CORS_ORIGINS 는 웹 현관 배포 후 실제 URL로 갱신
+  CORS_ORIGINS = "https://with-care-web.fly.dev"
+
+[deploy]
+  release_command = "python -m alembic upgrade head"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"    # 스케줄러(매일 독촉)가 살아 있어야 함
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
