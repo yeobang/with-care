@@ -3,6 +3,7 @@ import { LinkingOptions, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
+import { api } from "./src/api";
 import BoardScreen from "./src/screens/BoardScreen";
 import CrewScreen from "./src/screens/CrewScreen";
 import HomeScreen from "./src/screens/HomeScreen";
@@ -35,7 +36,10 @@ export default function App() {
       let ok = false;
       if (supabase) {
         const { data } = await supabase.auth.getSession();
-        ok = !!data.session;
+        if (data.session) {
+          // 세션은 있어도 프로필(signup) 전이면 Login으로 — 메일 링크 직후 경로
+          ok = await api.get("/me").then(() => true).catch(() => false);
+        }
       }
       if (!ok) ok = !!(await AsyncStorage.getItem("userId")); // dev 헤더 폴백
       setLoggedIn(ok);

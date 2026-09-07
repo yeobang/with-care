@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { api, ApiError } from "../api";
 import { supabase } from "../supabase";
@@ -13,6 +13,15 @@ export default function LoginScreen({ navigation }: any) {
   const [name, setName] = useState("");
 
   const done = () => navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+
+  // 메일 링크 클릭으로 이미 세션이 생긴 채 도착한 경우 → 프로필 단계로 직행
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) ensureProfile();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 로그인 후: 프로필 있으면 홈, 없으면(signup_required) 이름 입력으로. */
   const ensureProfile = async () => {
@@ -91,19 +100,22 @@ export default function LoginScreen({ navigation }: any) {
         </>
       ) : (
         <>
-          <Text style={ui.hint}>{email} 로 보낸 코드를 입력해주세요</Text>
+          <Text style={[ui.hint, { fontSize: 14, color: "#333" }]}>
+            {email} 로 메일을 보냈어요.{"\n"}메일의 <Text style={{ fontWeight: "700" }}>"바로 로그인" 링크</Text>를 누르면 이 브라우저에서 로그인돼요.
+          </Text>
+          <Text style={ui.hint}>메일에 인증 코드가 보이면 여기 입력해도 돼요</Text>
           <TextInput
             style={[ui.input, { width: "100%" }]}
-            placeholder="123456"
+            placeholder="인증 코드"
             keyboardType="number-pad"
             value={code}
             onChangeText={setCode}
           />
           <TouchableOpacity style={ui.primaryBtn} onPress={verifyOtp}>
-            <Text style={ui.primaryBtnText}>확인</Text>
+            <Text style={ui.primaryBtnText}>코드로 확인</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={sendOtp}>
-            <Text style={ui.hint}>코드 다시 받기</Text>
+            <Text style={ui.hint}>메일 다시 받기</Text>
           </TouchableOpacity>
         </>
       )}

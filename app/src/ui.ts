@@ -1,8 +1,25 @@
 import { StyleSheet } from "react-native";
 
 export const ui = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 20, alignItems: "center", justifyContent: "center" },
-  screen: { flex: 1, backgroundColor: "#fff", padding: 16 },
+  // 반응형: 모바일은 전체 폭, 태블릿·데스크톱 웹은 560px 카드로 중앙 정렬
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: "#fff",
+    padding: 16,
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+  },
   title: { fontSize: 28, fontWeight: "700" },
   subtitle: { fontSize: 14, color: "#888", marginTop: 8 },
   hint: { fontSize: 12, color: "#aaa", marginTop: 12, textAlign: "center" },
