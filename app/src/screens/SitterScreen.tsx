@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { notify } from "../notify";
 import { api, Child, SitterRequest } from "../api";
 import { ui } from "../ui";
 
@@ -32,7 +33,7 @@ export default function SitterScreen({ route }: any) {
       await fn();
       load();
     } catch (e: any) {
-      Alert.alert(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
     }
   };
 

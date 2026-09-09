@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
-import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { notify } from "../notify";
 import { api } from "../api";
 import { supabase } from "../supabase";
 import { ui } from "../ui";
@@ -54,7 +55,7 @@ export default function InviteScreen({ route, navigation }: any) {
         routes: [{ name: "Home" }, { name: "Crew", params: { crewId: crew.id, name: crew.name } }],
       });
     } catch (e: any) {
-      Alert.alert(e.invariant ? `가드레일 ${e.invariant}` : "합류 실패", e.message);
+      notify(e.invariant ? `가드레일 ${e.invariant}` : "합류 실패", e.message);
     }
   };
 

@@ -1,7 +1,8 @@
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { notify } from "../notify";
 import { api, Assignment, CareSession, Child, Slot, uploadSessionPhoto } from "../api";
 import { ui } from "../ui";
 
@@ -65,7 +66,7 @@ export default function BoardScreen({ route, navigation }: any) {
       await fn();
       load();
     } catch (e: any) {
-      Alert.alert(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
     }
   };
 
@@ -213,7 +214,7 @@ export default function BoardScreen({ route, navigation }: any) {
                     kind: "no_show",
                     offender_id: s.caregiver_id,
                   });
-                  Alert.alert("기록 완료", "규약의 벌금 안내를 앱이 대신 전했어요.");
+                  notify("기록 완료", "규약의 벌금 안내를 앱이 대신 전했어요.");
                 })}
               >
                 <Text style={ui.smallBtnText}>돌봄자 노쇼 기록</Text>

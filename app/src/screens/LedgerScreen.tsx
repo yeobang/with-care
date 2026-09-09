@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, Linking, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Linking, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { notify } from "../notify";
 import { api } from "../api";
 import { ui } from "../ui";
 
@@ -41,7 +42,7 @@ export default function LedgerScreen({ route }: any) {
       await fn();
       load();
     } catch (e: any) {
-      Alert.alert(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
     }
   };
 
@@ -73,7 +74,7 @@ export default function LedgerScreen({ route }: any) {
           style={ui.primaryBtn}
           onPress={guard(async () => {
             const r = await api.post<{ nudged_users: number }>(`/crews/${crewId}/settlements/nudge`);
-            Alert.alert("독촉 완료", `${r.nudged_users}명에게 알림을 보냈어요. 매일 아침에도 자동으로 알려드려요.`);
+            notify("독촉 완료", `${r.nudged_users}명에게 알림을 보냈어요. 매일 아침에도 자동으로 알려드려요.`);
           })}
         >
           <Text style={ui.primaryBtnText}>미정산 독촉 보내기</Text>
@@ -96,7 +97,7 @@ export default function LedgerScreen({ route }: any) {
             {s.unsettled && s.from_user === myId && (
               <TouchableOpacity
                 style={ui.smallBtn}
-                onPress={() => Linking.openURL(`supertoss://send?amount=${s.amount_krw}`).catch(() => Alert.alert("안내", "토스 앱이 없어요. 페이 앱에서 직접 송금해주세요."))}
+                onPress={() => Linking.openURL(`supertoss://send?amount=${s.amount_krw}`).catch(() => notify("안내", "토스 앱이 없어요. 페이 앱에서 직접 송금해주세요."))}
               >
                 <Text style={ui.smallBtnText}>토스로 송금</Text>
               </TouchableOpacity>

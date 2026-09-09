@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
-import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { notify } from "../notify";
 import { api, ApiError } from "../api";
 import { supabase } from "../supabase";
 import { ui } from "../ui";
@@ -30,14 +31,14 @@ export default function LoginScreen({ navigation }: any) {
       done();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setStep("profile");
-      else Alert.alert("오류", (e as Error).message);
+      else notify("오류", (e as Error).message);
     }
   };
 
   const sendOtp = async () => {
     if (!supabase || !email.trim()) return;
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim() });
-    if (error) Alert.alert("오류", error.message);
+    if (error) notify("오류", error.message);
     else setStep("otp");
   };
 
@@ -48,7 +49,7 @@ export default function LoginScreen({ navigation }: any) {
       token: code.trim(),
       type: "email",
     });
-    if (error) Alert.alert("오류", error.message);
+    if (error) notify("오류", error.message);
     else await ensureProfile();
   };
 
@@ -60,7 +61,7 @@ export default function LoginScreen({ navigation }: any) {
       await api.post("/identity/verify"); // 본인인증(스텁 어댑터) — PASS류 확보 시 교체
       done();
     } catch (e: any) {
-      Alert.alert("오류", e.message);
+      notify("오류", e.message);
     }
   };
 

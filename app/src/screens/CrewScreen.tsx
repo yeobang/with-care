@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { notify } from "../notify";
 import { api, CrewView } from "../api";
 import { ui } from "../ui";
 
@@ -37,7 +38,7 @@ export default function CrewScreen({ route, navigation }: any) {
       await fn();
       load();
     } catch (e: any) {
-      Alert.alert(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
     }
   };
 
@@ -62,8 +63,10 @@ export default function CrewScreen({ route, navigation }: any) {
       </TouchableOpacity>
       {invite && (
         <View style={ui.card}>
-          <Text selectable style={{ fontSize: 12 }}>{invite}</Text>
-          <Text style={ui.hint}>카톡방에 이 토큰을 공유하세요 (P5에서 링크로 대체)</Text>
+          <Text selectable style={{ fontSize: 13, fontWeight: "600" }}>
+            {`https://with-care-web.fly.dev/invite/${invite}`}
+          </Text>
+          <Text style={ui.hint}>이 링크를 길게 눌러 복사해서 카톡방에 공유하세요 (7일 유효, 1회용)</Text>
         </View>
       )}
 
