@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Btn, Columns, Page, PageHeader, Pill } from "../components";
 import { notify } from "../notify";
 import { api, Child, SitterRequest } from "../api";
-import { ui } from "../ui";
+import { t, ui } from "../ui";
 
 function nextMonday(): string {
   const d = new Date();
@@ -57,11 +58,12 @@ export default function SitterScreen({ route }: any) {
     })();
 
   return (
-    <ScrollView style={ui.screen}>
+    <Page wide>
+      <PageHeader title="시터 공구" sub="빈칸의 폴백 — 금액은 계산·안내까지" />
       <Text style={ui.sectionTitle}>공구 요청 만들기 (내 아이 전체로)</Text>
       <View style={ui.row}>
-        <TextInput style={[ui.input, { flex: 1, marginRight: 8 }]} value={date} onChangeText={setDate} placeholder="2026-09-07" />
-        <TextInput style={[ui.input, { width: 90 }]} value={hours} onChangeText={setHours} placeholder="14-17" />
+        <TextInput style={[ui.input, { flex: 1, marginRight: 8 }]} value={date} onChangeText={setDate} placeholderTextColor={t.sub} placeholder="2026-09-07" />
+        <TextInput style={[ui.input, { width: 90 }]} value={hours} onChangeText={setHours} placeholderTextColor={t.sub} placeholder="14-17" />
       </View>
       <TouchableOpacity style={ui.primaryBtn} onPress={createRequest}>
         <Text style={ui.primaryBtnText}>시터 공구 요청</Text>
@@ -126,7 +128,7 @@ export default function SitterScreen({ route }: any) {
       <View style={ui.row}>
         <TextInput
           style={[ui.input, { flex: 1, marginRight: 8 }]}
-          placeholder="시급 (원)"
+          placeholderTextColor={t.sub} placeholder="시급 (원)"
           keyboardType="number-pad"
           value={hourly}
           onChangeText={setHourly}
@@ -143,6 +145,6 @@ export default function SitterScreen({ route }: any) {
           <Text style={ui.primaryBtnText}>시급 저장</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </Page>
   );
 }

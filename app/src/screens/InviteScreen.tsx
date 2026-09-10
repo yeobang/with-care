@@ -4,7 +4,7 @@ import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { notify } from "../notify";
 import { api } from "../api";
 import { supabase } from "../supabase";
-import { ui } from "../ui";
+import { t, ui } from "../ui";
 
 interface Preview {
   crew_name: string;

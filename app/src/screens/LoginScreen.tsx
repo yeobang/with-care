@@ -1,12 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
-import { notify } from "../notify";
 import { api, ApiError } from "../api";
+import { Btn } from "../components";
+import { notify } from "../notify";
 import { supabase } from "../supabase";
-import { ui } from "../ui";
+import { t, ui } from "../ui";
 
-/** P6 실인증: 이메일 OTP(Supabase Auth). supabase 미설정이면 dev 헤더 가입 폴백. */
+/** P6 실인증: 이메일 링크/코드(Supabase Auth). supabase 미설정이면 dev 헤더 가입 폴백. */
 export default function LoginScreen({ navigation }: any) {
   const [step, setStep] = useState<"email" | "otp" | "profile">("email");
   const [email, setEmail] = useState("");
@@ -15,16 +16,6 @@ export default function LoginScreen({ navigation }: any) {
 
   const done = () => navigation.reset({ index: 0, routes: [{ name: "Home" }] });
 
-  // 메일 링크 클릭으로 이미 세션이 생긴 채 도착한 경우 → 프로필 단계로 직행
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) ensureProfile();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** 로그인 후: 프로필 있으면 홈, 없으면(signup_required) 이름 입력으로. */
   const ensureProfile = async () => {
     try {
       await api.get("/me");
@@ -35,6 +26,15 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
+  // 메일 링크로 이미 세션이 생긴 채 도착한 경우 → 프로필 단계로
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) ensureProfile();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sendOtp = async () => {
     if (!supabase || !email.trim()) return;
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim() });
@@ -44,11 +44,7 @@ export default function LoginScreen({ navigation }: any) {
 
   const verifyOtp = async () => {
     if (!supabase) return;
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: "email",
-    });
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "email" });
     if (error) notify("오류", error.message);
     else await ensureProfile();
   };
@@ -57,8 +53,8 @@ export default function LoginScreen({ navigation }: any) {
     if (!name.trim()) return;
     try {
       const user = await api.post<{ id: string }>("/users", { name: name.trim() });
-      if (!supabase) await AsyncStorage.setItem("userId", user.id); // dev 헤더 흐름
-      await api.post("/identity/verify"); // 본인인증(스텁 어댑터) — PASS류 확보 시 교체
+      if (!supabase) await AsyncStorage.setItem("userId", user.id);
+      await api.post("/identity/verify");
       done();
     } catch (e: any) {
       notify("오류", e.message);
@@ -66,60 +62,89 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const devMode = !supabase;
+
   return (
-    <View style={ui.container}>
-      <Text style={ui.title}>with-care</Text>
-      <Text style={ui.subtitle}>단톡방 옆에 사는 총무</Text>
-      {devMode || step === "profile" ? (
-        <>
-          <TextInput
-            style={[ui.input, { width: "100%" }]}
-            placeholder="이름"
-            value={name}
-            onChangeText={setName}
-          />
-          <TouchableOpacity style={ui.primaryBtn} onPress={createProfile}>
-            <Text style={ui.primaryBtnText}>{devMode ? "시작하기 (dev)" : "프로필 만들기"}</Text>
-          </TouchableOpacity>
-          {devMode && (
-            <Text style={ui.hint}>* dev 모드: Supabase 환경변수 없음 — 헤더 인증 폴백</Text>
+    <View style={{ flex: 1, backgroundColor: t.bg, justifyContent: "center" }}>
+      {/* 배경 파스텔 블롭 */}
+      <View style={{ position: "absolute", top: -130, right: -110, width: 320, height: 320, borderRadius: 999, backgroundColor: t.mintTint }} />
+      <View style={{ position: "absolute", top: 160, left: -100, width: 220, height: 220, borderRadius: 999, backgroundColor: t.lemonTint }} />
+      <View style={{ position: "absolute", bottom: -120, right: 40, width: 260, height: 260, borderRadius: 999, backgroundColor: t.coralTint, opacity: 0.6 }} />
+
+      <View style={{ width: "100%", maxWidth: 440, alignSelf: "center", paddingHorizontal: 24, gap: 30 }}>
+        <View style={{ alignItems: "center", gap: 10 }}>
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 26,
+              backgroundColor: t.mint,
+              alignItems: "center",
+              justifyContent: "center",
+              transform: [{ rotate: "-6deg" }],
+              shadowColor: t.mint,
+              shadowOpacity: 0.38,
+              shadowRadius: 20,
+              shadowOffset: { width: 0, height: 10 },
+            }}
+          >
+            <Text style={{ fontSize: 32 }}>🧡</Text>
+          </View>
+          <Text style={[ui.display, { fontSize: 40, marginTop: 6 }]}>with-care</Text>
+          <Text style={{ fontSize: 15, color: t.sub }}>단톡방 옆에 사는 총무</Text>
+        </View>
+
+        <View style={ui.card}>
+          {devMode || step === "profile" ? (
+            <>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub, marginBottom: 4 }}>
+                {devMode ? "이름을 알려주세요" : "거의 다 됐어요"}
+              </Text>
+              <TextInput style={ui.input} placeholder="이름" placeholderTextColor={t.sub} value={name} onChangeText={setName} />
+              <Btn label={devMode ? "시작하기 (dev)" : "프로필 만들기"} onPress={createProfile} />
+              {devMode && <Text style={ui.hint}>dev 모드: Supabase 환경변수 없음 — 헤더 인증 폴백</Text>}
+            </>
+          ) : step === "email" ? (
+            <>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub, marginBottom: 4 }}>이메일로 시작</Text>
+              <TextInput
+                style={ui.input}
+                placeholder="parent@example.com"
+                placeholderTextColor={t.sub}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <Btn label="메일로 시작하기" onPress={sendOtp} />
+              <Text style={ui.hint}>메일 속 로그인 링크를 누르면 이 화면에서 이어져요</Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: 14, color: t.ink, lineHeight: 21 }}>
+                {email} 로 메일을 보냈어요.{"\n"}
+                <Text style={{ fontWeight: "700", color: t.mintDeep }}>로그인 링크</Text>를 누르면 이 화면에서 이어져요.
+              </Text>
+              <Text style={ui.hint}>메일에 인증 코드가 보이면 여기 입력해도 돼요</Text>
+              <TextInput
+                style={ui.input}
+                placeholder="인증 코드"
+                placeholderTextColor={t.sub}
+                keyboardType="number-pad"
+                value={code}
+                onChangeText={setCode}
+              />
+              <Btn label="코드로 확인" tone="soft" onPress={verifyOtp} />
+              <TouchableOpacity onPress={sendOtp}>
+                <Text style={[ui.hint, { textAlign: "center" }]}>메일 다시 받기</Text>
+              </TouchableOpacity>
+            </>
           )}
-        </>
-      ) : step === "email" ? (
-        <>
-          <TextInput
-            style={[ui.input, { width: "100%" }]}
-            placeholder="이메일"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TouchableOpacity style={ui.primaryBtn} onPress={sendOtp}>
-            <Text style={ui.primaryBtnText}>인증 코드 받기</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <Text style={[ui.hint, { fontSize: 14, color: "#333" }]}>
-            {email} 로 메일을 보냈어요.{"\n"}메일의 <Text style={{ fontWeight: "700" }}>"바로 로그인" 링크</Text>를 누르면 이 브라우저에서 로그인돼요.
-          </Text>
-          <Text style={ui.hint}>메일에 인증 코드가 보이면 여기 입력해도 돼요</Text>
-          <TextInput
-            style={[ui.input, { width: "100%" }]}
-            placeholder="인증 코드"
-            keyboardType="number-pad"
-            value={code}
-            onChangeText={setCode}
-          />
-          <TouchableOpacity style={ui.primaryBtn} onPress={verifyOtp}>
-            <Text style={ui.primaryBtnText}>코드로 확인</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={sendOtp}>
-            <Text style={ui.hint}>메일 다시 받기</Text>
-          </TouchableOpacity>
-        </>
-      )}
+        </View>
+
+        <Text style={{ fontSize: 12, color: t.sub, textAlign: "center" }}>
+          본인인증과 크루 초대 없이는 아이 인계가 일어나지 않아요
+        </Text>
+      </View>
     </View>
   );
 }
