@@ -11,6 +11,7 @@ primary_region = "nrt"  # 도쿄 — Supabase 프로젝트와 동일 리전
   SUPABASE_URL = "https://knfwblfrmpochzaarvtq.supabase.co"
   # CORS_ORIGINS 는 웹 현관 배포 후 실제 URL로 갱신
   CORS_ORIGINS = "https://with-care-web.fly.dev"
+  WEB_ORIGIN = "https://with-care-web.fly.dev"
 
 [deploy]
   release_command = "python -m alembic upgrade head"

@@ -3,13 +3,22 @@ import { supabase } from "./supabase";
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
 
-/** P6: Supabase 세션이 있으면 Bearer JWT, 없으면 dev 헤더(X-User-Id) 폴백. */
+/**
+ * 인증 헤더 우선순위:
+ * 1) Supabase 세션 (이메일·카카오·구글)
+ * 2) 자체 발급 토큰 (네이버 — Supabase 미지원이라 우리 서버가 서명)
+ * 3) dev 헤더 (X-User-Id)
+ */
+export const LOCAL_TOKEN_KEY = "authToken";
+
 async function authHeaders(): Promise<Record<string, string>> {
   if (supabase) {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (token) return { Authorization: `Bearer ${token}` };
   }
+  const local = await AsyncStorage.getItem(LOCAL_TOKEN_KEY);
+  if (local) return { Authorization: `Bearer ${local}` };
   const userId = await AsyncStorage.getItem("userId");
   return userId ? { "X-User-Id": userId } : {};
 }

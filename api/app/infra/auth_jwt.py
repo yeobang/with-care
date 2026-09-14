@@ -37,7 +37,18 @@ def _jwks() -> dict:
 
 
 def verify(token: str) -> dict:
-    """토큰 검증 → claims. 서명·만료·오디언스 어느 하나라도 틀리면 401 (fail-closed)."""
+    """토큰 검증 → claims. 서명·만료·오디언스 어느 하나라도 틀리면 401 (fail-closed).
+
+    발급자 두 곳: Supabase(ES256/JWKS) | 우리(HS256, 네이버 경로). iss로 갈라 처리한다.
+    """
+    from app.infra import local_jwt
+
+    try:
+        if jwt.decode(token, options={"verify_signature": False}).get("iss") == local_jwt.ISSUER:
+            return local_jwt.verify(token)
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰")
+
     try:
         kid = jwt.get_unverified_header(token).get("kid")
         key = next(k for k in _jwks()["keys"] if k.get("kid") == kid)

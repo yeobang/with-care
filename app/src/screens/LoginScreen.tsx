@@ -1,8 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
-import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Linking, Platform, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { api, ApiError, IdentityMethod } from "../api";
-import { enabledSocials, sendPhoneCode, signInWithSocial, Social, verifyPhoneCode } from "../authProviders";
+import { enabledSocials, naverStartUrl, sendPhoneCode, signInWithSocial, Social, verifyPhoneCode } from "../authProviders";
+import { LOCAL_TOKEN_KEY } from "../api";
 import { Btn } from "../components";
 import { notify } from "../notify";
 import { supabase } from "../supabase";
@@ -44,6 +45,24 @@ export default function LoginScreen({ navigation }: any) {
       else notify("오류", (e as Error).message);
     }
   };
+
+  // 네이버 콜백으로 돌아온 경우: URL 조각의 토큰을 저장하고 이어간다
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const hash = window.location.hash ?? "";
+    const m = /token=([^&]+)/.exec(hash);
+    if (!m) return;
+    const signup = /signup=1/.test(hash);
+    const nm = /name=([^&]*)/.exec(hash);
+    (async () => {
+      await AsyncStorage.setItem(LOCAL_TOKEN_KEY, decodeURIComponent(m[1]));
+      window.history.replaceState(null, "", window.location.pathname);
+      if (nm && nm[1]) setName(decodeURIComponent(nm[1]));
+      if (signup) setNeedProfile(true);
+      else await ensureProfile();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     enabledSocials().then(setSocials);
@@ -262,6 +281,12 @@ export default function LoginScreen({ navigation }: any) {
                         justifyContent: "center",
                       }}
                       onPress={run(async () => {
+                        if (sp.id === "naver") {
+                          // 우리 서버가 처리 — 콜백이 토큰을 URL로 돌려준다
+                          if (Platform.OS === "web") window.location.href = naverStartUrl();
+                          else Linking.openURL(naverStartUrl());
+                          return;
+                        }
                         const { error } = await signInWithSocial(sp.id);
                         if (error) notify("로그인 실패", error.message);
                       })}

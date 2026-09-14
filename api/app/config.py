@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8081"
     # 본인인증 수단 (I1 관문): stub | email | phone — 키 확보에 따라 승급
     identity_method: str = "stub"
+    # 네이버 로그인 (Supabase 미지원 → 자체 처리). 키가 없으면 기능 자체가 꺼진다
+    naver_client_id: str = ""
+    naver_client_secret: str = ""
+    # 자체 발급 JWT 서명 키 (네이버 경로 전용). 없으면 발급·검증 모두 거부
+    jwt_secret: str = ""
+    # 소셜 로그인 완료 후 돌아갈 웹 주소
+    web_origin: str = "http://localhost:8081"
 
 
 settings = Settings()
