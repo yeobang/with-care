@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { api, Child, CrewView } from "../api";
-import { Avatar, Btn, Columns, Empty, Note, Page, PageHeader, Pill } from "../components";
+import { Avatar, Btn, Columns, Empty, NavBar, Note, Page, PageHeader, Pill } from "../components";
+import { MonthPicker, SkeletonCard } from "../pickers";
 import { Icon } from "../Icon";
-import { notify } from "../notify";
+import { notify, notifyError } from "../notify";
 import { registerPush } from "../push";
 import { t, ui, useLayout } from "../ui";
 
@@ -15,11 +16,14 @@ export default function HomeScreen({ navigation }: any) {
   const [inviteToken, setInviteToken] = useState("");
   const [childName, setChildName] = useState("");
   const [childBirth, setChildBirth] = useState("");
+  const [loading, setLoading] = useState(true);
   const { isWide } = useLayout();
 
   const load = useCallback(() => {
-    api.get<CrewView[]>("/my/crews").then(setCrews).catch(() => {});
-    api.get<Child[]>("/my/children").then(setChildren).catch(() => {});
+    Promise.all([
+      api.get<CrewView[]>("/my/crews").then(setCrews).catch(() => {}),
+      api.get<Child[]>("/my/children").then(setChildren).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
   useFocusEffect(load);
 
@@ -34,7 +38,7 @@ export default function HomeScreen({ navigation }: any) {
       setCrewName("");
       navigation.navigate("Crew", { crewId: crew.id, name: crew.name });
     } catch (e: any) {
-      notify("오류", e.message);
+      notifyError(e);
     }
   };
 
@@ -46,13 +50,13 @@ export default function HomeScreen({ navigation }: any) {
       setInviteToken("");
       navigation.navigate("Crew", { crewId: crew.id, name: crew.name });
     } catch (e: any) {
-      notify("합류 실패", e.message);
+      notifyError(e);
     }
   };
 
   const addChild = async () => {
     if (!childName.trim() || !/^\d{4}-\d{2}$/.test(childBirth)) {
-      notify("입력 확인", "아이 이름과 생년월(YYYY-MM)을 입력해주세요");
+      notify("조금만 더", "아이 이름과 태어난 달을 채워주세요", "error");
       return;
     }
     try {
@@ -63,16 +67,18 @@ export default function HomeScreen({ navigation }: any) {
       });
       setChildName("");
       setChildBirth("");
+      notify("등록했어요", `${childName.trim()} 아이를 추가했어요`, "success");
       load();
     } catch (e: any) {
-      notify("오류", e.message);
+      notifyError(e);
     }
   };
 
   const crewList = (
     <View>
       <Text style={ui.sectionTitle}>내 모임</Text>
-      {crews.length === 0 && (
+      {loading && <SkeletonCard lines={2} />}
+      {!loading && crews.length === 0 && (
         <Empty
           icon="users"
           title="아직 모임이 없어요"
@@ -147,28 +153,24 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </View>
       ))}
-      <View style={{ flexDirection: "row", gap: 8 }}>
+      <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
         <TextInput
-          style={[ui.input, { flex: 1 }]}
+          style={[ui.input, { flex: 1, minWidth: 140 }]}
           placeholder="이름"
           placeholderTextColor={t.sub}
           value={childName}
           onChangeText={setChildName}
         />
-        <TextInput
-          style={[ui.input, { width: 120 }]}
-          placeholder="2022-05"
-          placeholderTextColor={t.sub}
-          value={childBirth}
-          onChangeText={setChildBirth}
-        />
+        <View style={{ width: 190 }}>
+          <MonthPicker value={childBirth} onChange={setChildBirth} />
+        </View>
       </View>
       <Btn label="아이 등록" tone="soft" onPress={addChild} />
     </View>
   );
 
   return (
-    <Page wide>
+    <Page wide nav={<NavBar navigation={navigation} />}>
       <PageHeader title="안녕하세요" sub="이번 주 돌봄, 제가 챙길게요" />
       {isWide ? <Columns left={crewList} right={childPanel} /> : (
         <View>

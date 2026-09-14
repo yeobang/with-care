@@ -3,8 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { api, Assignment, CareSession, Child, Slot, uploadSessionPhoto } from "../api";
-import { Avatar, Btn, Columns, Page, PageHeader, Pill } from "../components";
-import { notify } from "../notify";
+import { Avatar, Btn, Columns, Empty, NavBar, Page, PageHeader, Pill } from "../components";
+import { SkeletonCard } from "../pickers";
+import { notify, notifyError } from "../notify";
 import { t, ui, useLayout } from "../ui";
 
 interface Photo {
@@ -47,6 +48,7 @@ export default function BoardScreen({ route, navigation }: any) {
   const [photos, setPhotos] = useState<Record<string, Photo[]>>({});
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [mode, setMode] = useState<"available" | "need">("available");
+  const [loading, setLoading] = useState(true);
   const { isWide } = useLayout();
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function BoardScreen({ route, navigation }: any) {
         setPhotos(Object.fromEntries(entries));
       })
       .catch(() => {});
-    api.get<Child[]>("/my/children").then(setChildren).catch(() => {});
+    api.get<Child[]>("/my/children").then(setChildren).catch(() => {}).finally(() => setLoading(false));
     // 데스크톱 주간 그리드: 7일치를 병렬로 (크루 단위라 호출 수가 작다)
     Promise.all(
       DAY_LABELS.map((_, i) => {
@@ -83,7 +85,7 @@ export default function BoardScreen({ route, navigation }: any) {
       await fn();
       load();
     } catch (e: any) {
-      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notifyError(e);
     }
   };
 
@@ -246,7 +248,7 @@ export default function BoardScreen({ route, navigation }: any) {
       ) : (
         dayStrip
       )}
-      <Btn label="배정 후보 만들기" onPress={guard(() => api.post(`/crews/${crewId}/propose?date=${date}`))} />
+      <Btn label="돌봄 후보 만들기" onPress={guard(() => api.post(`/crews/${crewId}/propose?date=${date}`))} />
     </View>
   );
 
@@ -277,8 +279,15 @@ export default function BoardScreen({ route, navigation }: any) {
         </View>
       )}
 
-      <Text style={ui.sectionTitle}>배정 후보</Text>
-      {proposals.length === 0 && <Text style={ui.hint}>아직 후보가 없어요 — 시간을 등록하고 후보를 만들어보세요</Text>}
+      <Text style={ui.sectionTitle}>돌봄 후보</Text>
+      {loading && <SkeletonCard lines={2} />}
+      {!loading && proposals.length === 0 && (
+        <Empty
+          icon="calendar"
+          title="아직 후보가 없어요"
+          body={"되는 시간을 눌러 표시한 뒤\n“돌봄 후보 만들기”를 누르면 짝을 맞춰드려요."}
+        />
+      )}
       {proposals.map((p) => (
         <View key={p.id} style={ui.card}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -286,7 +295,7 @@ export default function BoardScreen({ route, navigation }: any) {
               {p.start_hour}시~{p.end_hour}시
             </Text>
             <Pill
-              label={p.status === "confirmed" ? "확정됨" : p.status === "declined" ? "거절됨" : "후보"}
+              label={p.status === "confirmed" ? "확정" : p.status === "declined" ? "거절됨" : "후보"}
               tone={p.status === "confirmed" ? "mint" : p.status === "declined" ? "coral" : "neutral"}
             />
           </View>
@@ -324,8 +333,10 @@ export default function BoardScreen({ route, navigation }: any) {
         </View>
       ))}
 
-      <Text style={ui.sectionTitle}>세션</Text>
-      {sessions.length === 0 && <Text style={ui.hint}>아직 확정된 세션이 없어요</Text>}
+      <Text style={ui.sectionTitle}>돌봄 일정</Text>
+      {!loading && sessions.length === 0 && (
+        <Empty icon="clock" title="확정된 돌봄이 없어요" body="후보에서 각 집이 확정하면 여기에 일정이 생겨요." />
+      )}
       {sessions.map((s) => (
         <View key={s.id} style={ui.card}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -333,7 +344,7 @@ export default function BoardScreen({ route, navigation }: any) {
               {s.date} {s.start_hour}시~{s.end_hour}시
             </Text>
             <Pill
-              label={s.canceled_at ? "취소됨" : s.handoff_ended_at ? "종료" : s.handoff_started_at ? "진행 중" : "인계 전"}
+              label={s.canceled_at ? "취소됨" : s.handoff_ended_at ? "끝남" : s.handoff_started_at ? "돌보는 중" : "시작 전"}
               tone={s.canceled_at ? "coral" : s.handoff_started_at ? "mint" : "neutral"}
             />
           </View>
@@ -364,20 +375,20 @@ export default function BoardScreen({ route, navigation }: any) {
             <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
               {!s.handoff_started_at && (
                 <>
-                  <Btn label="맡김 확인" style={{ flex: 1 }} onPress={guard(() => api.post(`/sessions/${s.id}/handoff/start`))} />
-                  <Btn label="세션 취소" tone="ghost" style={{ width: 110 }} onPress={guard(() => api.post(`/sessions/${s.id}/cancel`))} />
+                  <Btn label="맡겼어요" style={{ flex: 1 }} onPress={guard(() => api.post(`/sessions/${s.id}/handoff/start`))} />
+                  <Btn label="일정 취소" tone="ghost" style={{ width: 110 }} onPress={guard(() => api.post(`/sessions/${s.id}/cancel`))} />
                 </>
               )}
               {s.handoff_started_at && !s.handoff_ended_at && (
-                <Btn label="돌려받음 확인" style={{ flex: 1 }} onPress={guard(() => api.post(`/sessions/${s.id}/handoff/end`))} />
+                <Btn label="데려왔어요" style={{ flex: 1 }} onPress={guard(() => api.post(`/sessions/${s.id}/handoff/end`))} />
               )}
               {myId && myId !== s.caregiver_id && (
                 <Btn
-                  label="돌봄자 노쇼 기록"
+                  label="안 왔어요 기록"
                   tone="ghost"
                   onPress={guard(async () => {
                     await api.post(`/sessions/${s.id}/incidents`, { kind: "no_show", offender_id: s.caregiver_id });
-                    notify("기록 완료", "규약의 벌금 안내를 앱이 대신 전했어요.");
+                    notify("기록했어요", "규칙에 정한 안내를 앱이 대신 전했어요", "success");
                   })}
                 />
               )}
@@ -390,7 +401,7 @@ export default function BoardScreen({ route, navigation }: any) {
   );
 
   return (
-    <Page wide>
+    <Page wide nav={<NavBar navigation={navigation} crewId={crewId} crewName={route.params?.name} active="board" />}>
       <PageHeader title="주간 보드" sub={`${weekStart} 주 · 선택: ${date}`} />
       <Columns left={leftCol} right={rightCol} ratio={1.6} />
     </Page>

@@ -3,8 +3,77 @@ import { ScrollView, Text, TouchableOpacity, View, ViewStyle } from "react-nativ
 import { Icon, IconName } from "./Icon";
 import { t, tintFor, ui, useLayout } from "./ui";
 
+/** 상단 네비게이션 — 로고 + (모임 안에서는) 보드·장부·시터 바로가기. */
+export function NavBar({ navigation, crewId, crewName, active }: {
+  navigation: any;
+  crewId?: string;
+  crewName?: string;
+  active?: "board" | "ledger" | "sitter" | "crew";
+}) {
+  const { isWide } = useLayout();
+  const links: { key: "crew" | "board" | "ledger" | "sitter"; label: string; icon: IconName; screen: string }[] = [
+    { key: "crew", label: "모임", icon: "users", screen: "Crew" },
+    { key: "board", label: "주간 보드", icon: "calendar", screen: "Board" },
+    { key: "ledger", label: "장부", icon: "coins", screen: "Ledger" },
+    { key: "sitter", label: "시터", icon: "brief", screen: "Sitter" },
+  ];
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: t.border,
+        marginBottom: 6,
+        gap: 12,
+        flexWrap: "wrap",
+      }}
+    >
+      <TouchableOpacity
+        style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+        onPress={() => navigation.navigate("Home")}
+      >
+        <View style={{ width: 30, height: 30, borderRadius: 11, backgroundColor: t.mint, alignItems: "center", justifyContent: "center" }}>
+          <Icon name="heart" size={16} color="#fff" width={2.2} />
+        </View>
+        {isWide && <Text style={[ui.display, { fontSize: 18 }]}>with-care</Text>}
+      </TouchableOpacity>
+
+      {!!crewId && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, flexWrap: "wrap" }}>
+          {links.map((l) => {
+            const on = l.key === active;
+            return (
+              <TouchableOpacity
+                key={l.key}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  paddingVertical: 9,
+                  paddingHorizontal: 12,
+                  borderRadius: 12,
+                  backgroundColor: on ? t.mintTint : "transparent",
+                }}
+                onPress={() => navigation.navigate(l.screen, { crewId, name: crewName })}
+              >
+                <Icon name={l.icon} size={16} color={on ? t.mintDeep : t.sub} />
+                {isWide && (
+                  <Text style={{ fontSize: 13, fontWeight: on ? "700" : "400", color: on ? t.mintDeep : t.sub }}>{l.label}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
 /** 넓은 화면에서 중앙 정렬 + 최대폭 제한. 모든 화면의 바깥 껍데기. */
-export function Page({ children, wide }: { children?: ReactNode; wide?: boolean }) {
+export function Page({ children, wide, nav }: { children?: ReactNode; wide?: boolean; nav?: ReactNode }) {
   const { contentMax } = useLayout();
   return (
     <ScrollView
@@ -12,6 +81,7 @@ export function Page({ children, wide }: { children?: ReactNode; wide?: boolean 
       contentContainerStyle={{ paddingBottom: 48, paddingHorizontal: 20, paddingTop: 12 }}
     >
       <View style={{ width: "100%", maxWidth: wide ? contentMax : Math.min(contentMax, 640), alignSelf: "center" }}>
+        {nav}
         {children}
       </View>
     </ScrollView>

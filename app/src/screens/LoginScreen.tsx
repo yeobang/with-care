@@ -5,7 +5,7 @@ import { api, ApiError, IdentityMethod } from "../api";
 import { enabledSocials, naverStartUrl, sendPhoneCode, signInWithSocial, Social, verifyPhoneCode } from "../authProviders";
 import { LOCAL_TOKEN_KEY } from "../api";
 import { Btn } from "../components";
-import { notify } from "../notify";
+import { notify, notifyError } from "../notify";
 import { supabase } from "../supabase";
 import { t, ui } from "../ui";
 
@@ -84,7 +84,7 @@ export default function LoginScreen({ navigation }: any) {
     try {
       await fn();
     } catch (e: any) {
-      notify("오류", e?.message ?? "잠시 후 다시 시도해주세요");
+      notifyError(e);
     } finally {
       setBusy(false);
     }
@@ -93,13 +93,13 @@ export default function LoginScreen({ navigation }: any) {
   const signUp = run(async () => {
     if (!supabase) return;
     if (!email.trim() || password.length < 8) {
-      notify("입력 확인", "이메일과 8자 이상 비밀번호를 입력해주세요");
+      notify("조금만 더", "이메일과 8자 이상 비밀번호를 입력해주세요", "error");
       return;
     }
     const { error } = await supabase.auth.signUp({ email: email.trim(), password });
     if (error) {
       const dup = /already|exists|registered/i.test(error.message);
-      notify(dup ? "이미 가입된 이메일" : "가입 실패", dup ? "로그인 탭에서 로그인해주세요" : error.message);
+      notify(dup ? "이미 가입된 이메일이에요" : "가입 실패", dup ? "로그인 탭에서 들어와주세요" : error.message, "error");
       if (dup) setMode("login");
       return;
     }
@@ -110,7 +110,7 @@ export default function LoginScreen({ navigation }: any) {
     if (!supabase) return;
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
-      notify("로그인 실패", /invalid/i.test(error.message) ? "이메일 또는 비밀번호를 확인해주세요" : error.message);
+      notify("로그인 실패", /invalid/i.test(error.message) ? "이메일 또는 비밀번호를 확인해주세요" : error.message, "error");
       return;
     }
     await ensureProfile();

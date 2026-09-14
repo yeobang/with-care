@@ -13,6 +13,7 @@ import InviteScreen from "./src/screens/InviteScreen";
 import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/supabase";
+import { ToastHost } from "./src/Toast";
 
 const Stack = createNativeStackNavigator();
 
@@ -54,15 +55,16 @@ export default function App() {
   return (
     <NavigationContainer linking={linking}>
       <StatusBar style="auto" />
+      <ToastHost />
       <Stack.Navigator initialRouteName={loggedIn ? "Home" : "Landing"}>
         <Stack.Screen name="Landing" component={LandingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: "with-care" }} />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen
           name="Crew"
           component={CrewScreen}
-          options={({ route }: any) => ({ title: route.params?.name ?? "크루" })}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Ledger"

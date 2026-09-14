@@ -2,8 +2,9 @@ import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, View } from "react-native";
 import { api, CrewView } from "../api";
-import { Avatar, Btn, Columns, Empty, Note, Page, PageHeader, Pill, Steps } from "../components";
-import { notify } from "../notify";
+import { Avatar, Btn, Columns, NavBar, Note, Page, PageHeader, Pill, Steps } from "../components";
+import { SkeletonCard } from "../pickers";
+import { notify, notifyError } from "../notify";
 import { t, ui } from "../ui";
 
 interface Charter {
@@ -41,11 +42,17 @@ export default function CrewScreen({ route, navigation }: any) {
       await fn();
       load();
     } catch (e: any) {
-      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notifyError(e);
     }
   };
 
-  if (!crew) return <Page />;
+  if (!crew)
+    return (
+      <Page wide nav={<NavBar navigation={navigation} />}>
+        <SkeletonCard lines={3} />
+        <SkeletonCard lines={2} />
+      </Page>
+    );
   const active = crew.status === "active";
 
   const mainCol = (
@@ -87,6 +94,7 @@ export default function CrewScreen({ route, navigation }: any) {
         onPress={act(async () => {
           const r = await api.post<{ token: string }>(`/crews/${crewId}/invites`);
           setInvite(r.token);
+          notify("초대 링크를 만들었어요", "아래 주소를 카톡방에 붙여넣으세요", "success");
         })}
       />
       {invite && (
@@ -146,7 +154,7 @@ export default function CrewScreen({ route, navigation }: any) {
   );
 
   return (
-    <Page wide>
+    <Page wide nav={<NavBar navigation={navigation} crewId={crewId} crewName={crew.name} active="crew" />}>
       <PageHeader
         title={crew.name}
         sub={`${active ? "쓰는 중" : "준비 중"} · ${crew.member_count}집`}

@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
-import { Btn, Columns, Page, PageHeader, Pill } from "../components";
-import { notify } from "../notify";
+import { Btn, Columns, Empty, NavBar, Note, Page, PageHeader, Pill } from "../components";
+import { DatePicker, HourRangePicker, SkeletonCard } from "../pickers";
+import { notify, notifyError } from "../notify";
 import { api, Child, SitterRequest } from "../api";
 import { t, ui } from "../ui";
 
@@ -13,19 +14,21 @@ function nextMonday(): string {
 }
 
 /** 시터 공구 (P10, §25): 빈칸의 폴백 2단계. 금액은 계산·안내까지 — 결제 없음. */
-export default function SitterScreen({ route }: any) {
+export default function SitterScreen({ route, navigation }: any) {
   const { crewId } = route.params;
   const [requests, setRequests] = useState<SitterRequest[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
   const [profile, setProfile] = useState<{ hourly_krw: number } | null>(null);
   const [hourly, setHourly] = useState("");
   const [date, setDate] = useState(nextMonday());
-  const [hours, setHours] = useState("14-17");
+  const [startH, setStartH] = useState<number | null>(14);
+  const [endH, setEndH] = useState<number | null>(17);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     api.get<SitterRequest[]>(`/crews/${crewId}/sitter-requests`).then(setRequests).catch(() => {});
     api.get<Child[]>("/my/children").then(setChildren).catch(() => {});
-    api.get<{ hourly_krw: number } | null>("/sitters/me").then(setProfile).catch(() => {});
+    api.get<{ hourly_krw: number } | null>("/sitters/me").then(setProfile).catch(() => {}).finally(() => setLoading(false));
   }, [crewId]);
   useFocusEffect(load);
 
@@ -34,20 +37,20 @@ export default function SitterScreen({ route }: any) {
       await fn();
       load();
     } catch (e: any) {
-      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notifyError(e);
     }
   };
 
   const createRequest = guard(async () => {
-    const m = /^(\d{1,2})-(\d{1,2})$/.exec(hours.trim());
-    if (!m) throw new Error("시간은 14-17 형식으로 입력해주세요");
+    if (startH === null || endH === null) throw new Error("돌봄이 필요한 시간을 골라주세요");
     if (children.length === 0) throw new Error("먼저 홈에서 아이를 등록해주세요");
     await api.post(`/crews/${crewId}/sitter-requests`, {
-      date: date.trim(),
-      start_hour: Number(m[1]),
-      end_hour: Number(m[2]),
+      date,
+      start_hour: startH,
+      end_hour: endH,
       child_ids: children.map((c) => c.id),
     });
+    notify("요청을 올렸어요", "시터가 견적을 보내면 알려드릴게요", "success");
   });
 
   const joinAll = (requestId: string) =>
@@ -58,19 +61,24 @@ export default function SitterScreen({ route }: any) {
     })();
 
   return (
-    <Page wide>
-      <PageHeader title="시터 공구" sub="빈칸의 폴백 — 금액은 계산·안내까지" />
-      <Text style={ui.sectionTitle}>공구 요청 만들기 (내 아이 전체로)</Text>
-      <View style={ui.row}>
-        <TextInput style={[ui.input, { flex: 1, marginRight: 8 }]} value={date} onChangeText={setDate} placeholderTextColor={t.sub} placeholder="2026-09-07" />
-        <TextInput style={[ui.input, { width: 90 }]} value={hours} onChangeText={setHours} placeholderTextColor={t.sub} placeholder="14-17" />
-      </View>
-      <TouchableOpacity style={ui.primaryBtn} onPress={createRequest}>
-        <Text style={ui.primaryBtnText}>시터 공구 요청</Text>
-      </TouchableOpacity>
+    <Page wide nav={<NavBar navigation={navigation} crewId={crewId} crewName={route.params?.name} active="sitter" />}>
+      <PageHeader title="시터 함께 부르기" sub="여러 집이 나눠서 — 금액은 계산·안내까지" />
+      <Text style={ui.sectionTitle}>함께 시터 부르기</Text>
+      <Note icon="users">
+        여러 집이 같은 시간대에 함께 부르면 비용을 나눠 낼 수 있어요. 우리 아이 전체로 요청이 올라갑니다.
+      </Note>
+      <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub, marginBottom: 6 }}>언제가 필요하세요?</Text>
+      <DatePicker value={date} onChange={setDate} weekStart={nextMonday()} />
+      <View style={{ height: 14 }} />
+      <HourRangePicker start={startH} end={endH} onChange={(a, b) => { setStartH(a); setEndH(b); }} />
+      <Btn label="시터 요청 올리기" onPress={createRequest} />
       <Text style={ui.hint}>당일 요청은 긴급 할증 1.5배가 붙어요. 지불은 각 가정이 직접 — 앱은 계산·안내만.</Text>
 
-      <Text style={ui.sectionTitle}>공구 요청 ({requests.length})</Text>
+      <Text style={ui.sectionTitle}>올라온 요청 ({requests.length})</Text>
+      {loading && <SkeletonCard lines={2} />}
+      {!loading && requests.length === 0 && (
+        <Empty icon="brief" title="아직 요청이 없어요" body="위에서 시간을 고르고 요청을 올리면 시터가 견적을 보내요." />
+      )}
       {requests.map((r) => (
         <View key={r.id} style={ui.card}>
           <Text style={{ fontWeight: "700" }}>

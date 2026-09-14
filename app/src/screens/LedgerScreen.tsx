@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Linking, Text, View } from "react-native";
 import { api } from "../api";
-import { Avatar, Btn, Columns, Page, PageHeader, Pill } from "../components";
-import { notify } from "../notify";
+import { Avatar, Btn, Columns, Empty, NavBar, Page, PageHeader, Pill } from "../components";
+import { SkeletonCard } from "../pickers";
+import { notify, notifyError } from "../notify";
 import { t, ui } from "../ui";
 
 interface Settlement {
@@ -21,11 +22,12 @@ function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-export default function LedgerScreen({ route }: any) {
+export default function LedgerScreen({ route, navigation }: any) {
   const { crewId } = route.params;
   const [myId, setMyId] = useState<string | null>(null);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.get<{ id: string }>("/me").then((u) => setMyId(u.id)).catch(() => {});
@@ -33,7 +35,7 @@ export default function LedgerScreen({ route }: any) {
 
   const load = useCallback(() => {
     api.get<Record<string, number>>(`/crews/${crewId}/ledger`).then(setBalances).catch(() => {});
-    api.get<Settlement[]>(`/crews/${crewId}/settlements`).then(setSettlements).catch(() => {});
+    api.get<Settlement[]>(`/crews/${crewId}/settlements`).then(setSettlements).catch(() => {}).finally(() => setLoading(false));
   }, [crewId]);
   useFocusEffect(load);
 
@@ -42,7 +44,7 @@ export default function LedgerScreen({ route }: any) {
       await fn();
       load();
     } catch (e: any) {
-      notify(e.invariant ? `가드레일 ${e.invariant}` : "오류", e.message);
+      notifyError(e);
     }
   };
 
@@ -69,8 +71,10 @@ export default function LedgerScreen({ route }: any) {
       </View>
 
       <Text style={ui.sectionTitle}>가구별 잔액</Text>
-      {Object.keys(balances).length === 0 ? (
-        <Text style={ui.hint}>아직 기록이 없어요 — 세션이 끝나면 자동으로 쌓여요</Text>
+      {loading ? (
+        <SkeletonCard lines={3} />
+      ) : Object.keys(balances).length === 0 ? (
+        <Empty icon="coins" title="아직 기록이 없어요" body="돌봄이 끝나면 누가 얼마나 봤는지 여기에 자동으로 쌓여요." />
       ) : (
         <View style={ui.card}>
           {Object.entries(balances).map(([uid, bal]) => {
@@ -125,7 +129,9 @@ export default function LedgerScreen({ route }: any) {
         onPress={guard(() => api.post(`/crews/${crewId}/settlements/${currentMonth()}/compute`))}
       />
 
-      {settlements.length === 0 && <Text style={ui.hint}>아직 정산 제안이 없어요</Text>}
+      {!loading && settlements.length === 0 && (
+        <Empty icon="coins" title="정산할 게 없어요" body="이번 달 주고받을 몫이 생기면 여기에 정리해드려요." />
+      )}
 
       {settlements.map((s) => {
         const iPay = s.from_user === myId;
@@ -161,11 +167,11 @@ export default function LedgerScreen({ route }: any) {
 
       {unsettled.length > 0 && (
         <Btn
-          label="미정산 독촉 보내기 — 악역은 앱이 할게요"
+          label="아직 안 보낸 분께 알림 보내기"
           tone="soft"
           onPress={guard(async () => {
             const r = await api.post<{ nudged_users: number }>(`/crews/${crewId}/settlements/nudge`);
-            notify("독촉 완료", `${r.nudged_users}명에게 알림을 보냈어요. 매일 아침에도 자동으로 알려드려요.`);
+            notify("알림을 보냈어요", `${r.nudged_users}명에게 전했어요 · 매일 아침에도 자동으로 알려드려요`, "success");
           })}
         />
       )}
@@ -177,7 +183,7 @@ export default function LedgerScreen({ route }: any) {
   );
 
   return (
-    <Page wide>
+    <Page wide nav={<NavBar navigation={route.params?.navigation ?? navigation} crewId={crewId} crewName={route.params?.name} active="ledger" />}>
       <PageHeader title="장부·정산" sub={`${route.params?.name ?? "크루"} · ${currentMonth()}`} />
       <Columns left={balanceCol} right={settleCol} ratio={1} />
     </Page>
