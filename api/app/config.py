@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = False
     # P11: CORS 허용 오리진 (쉼표 구분). prod 배포 시 실제 도메인으로 교체
     cors_origins: str = "http://localhost:8081"
+    # 본인인증 수단 (I1 관문): stub | email | phone — 키 확보에 따라 승급
+    identity_method: str = "stub"
 
 
 settings = Settings()

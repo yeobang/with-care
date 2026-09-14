@@ -116,3 +116,57 @@ def test_prod_rejects_dev_header(client, monkeypatch):
     t = _token()
     client.post("/users", json={"name": "부모"}, headers=_bearer(t))
     assert client.get("/me", headers=_bearer(t)).status_code == 200
+
+
+# --- 본인인증 관문 (I1): 수단별 클레임 검증 ---
+
+
+def test_identity_phone_required_blocks_unverified(client, monkeypatch):
+    """identity_method=phone이면 전화 미인증 계정은 본인인증을 통과할 수 없다."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "identity_method", "phone")
+    t = _token()
+    client.post("/users", json={"name": "부모"}, headers=_bearer(t))
+    res = client.post("/identity/verify", headers=_bearer(t))
+    assert res.status_code == 403 and "휴대폰" in res.json()["detail"]
+    # 본인인증 없이는 크루도 못 만든다 (I1)
+    assert client.post("/crews", json={"name": "크루"}, headers=_bearer(t)).status_code == 403
+
+
+def test_identity_phone_passes_with_confirmed_claim(client, monkeypatch):
+    """Supabase가 SMS 검증을 끝낸 계정(phone_confirmed_at)만 통과한다."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "identity_method", "phone")
+    now = int(time.time())
+    tok = jwt.encode(
+        {"sub": SUB, "aud": "authenticated", "exp": now + 3600, "iat": now,
+         "phone": "+821012345678", "phone_confirmed_at": "2026-09-14T00:00:00Z"},
+        _priv, algorithm="ES256", headers={"kid": KID},
+    )
+    client.post("/users", json={"name": "부모"}, headers=_bearer(tok))
+    assert client.post("/identity/verify", headers=_bearer(tok)).json()["identity_verified"] is True
+    assert client.post("/crews", json={"name": "크루"}, headers=_bearer(tok)).status_code == 200
+
+
+def test_identity_email_method(client, monkeypatch):
+    """identity_method=email이면 메일 미확인은 막고, 확인된 계정은 통과한다."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "identity_method", "email")
+    t = _token()
+    client.post("/users", json={"name": "부모"}, headers=_bearer(t))
+    assert client.post("/identity/verify", headers=_bearer(t)).status_code == 403
+
+    now = int(time.time())
+    tok = jwt.encode(
+        {"sub": SUB, "aud": "authenticated", "exp": now + 3600, "iat": now,
+         "email_confirmed_at": "2026-09-14T00:00:00Z"},
+        _priv, algorithm="ES256", headers={"kid": KID},
+    )
+    assert client.post("/identity/verify", headers=_bearer(tok)).json()["identity_verified"] is True
+
+
+def test_identity_method_endpoint(client):
+    assert client.get("/identity/method").json()["method"] in ("stub", "email", "phone")

@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
-import { api, ApiError } from "../api";
+import { api, ApiError, IdentityMethod } from "../api";
+import { enabledSocials, sendPhoneCode, signInWithSocial, Social, verifyPhoneCode } from "../authProviders";
 import { Btn } from "../components";
 import { notify } from "../notify";
 import { supabase } from "../supabase";
@@ -24,6 +25,12 @@ export default function LoginScreen({ navigation }: any) {
   const [name, setName] = useState("");
   const [needProfile, setNeedProfile] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [socials, setSocials] = useState<Social[]>([]);
+  const [idMethod, setIdMethod] = useState<IdentityMethod["method"]>("stub");
+  const [needPhone, setNeedPhone] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [phoneCode, setPhoneCode] = useState("");
+  const [phoneSent, setPhoneSent] = useState(false);
 
   const done = () => navigation.reset({ index: 0, routes: [{ name: "Home" }] });
 
@@ -38,7 +45,12 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  // 메일 링크로 세션이 생긴 채 도착한 경우
+  useEffect(() => {
+    enabledSocials().then(setSocials);
+    api.get<IdentityMethod>("/identity/method").then((r) => setIdMethod(r.method)).catch(() => {});
+  }, []);
+
+  // 메일 링크·소셜 로그인으로 세션이 생긴 채 도착한 경우
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
@@ -103,7 +115,31 @@ export default function LoginScreen({ navigation }: any) {
     if (!name.trim()) return;
     const user = await api.post<{ id: string }>("/users", { name: name.trim() });
     if (!supabase) await AsyncStorage.setItem("userId", user.id); // dev 헤더 흐름
-    await api.post("/identity/verify"); // 본인인증(스텁 어댑터) — PASS류 확보 시 교체
+    try {
+      await api.post("/identity/verify"); // 수단은 서버가 고른다 (stub/email/phone)
+      done();
+    } catch (e) {
+      if (idMethod === "phone") setNeedPhone(true); // 휴대폰 인증 단계로
+      else throw e;
+    }
+  });
+
+  const requestPhone = run(async () => {
+    const p = phone.trim().replace(/[^0-9+]/g, "");
+    if (!p) return;
+    const { error } = await sendPhoneCode(p.startsWith("+") ? p : `+82${p.replace(/^0/, "")}`);
+    if (error) notify("문자 발송 실패", error.message);
+    else setPhoneSent(true);
+  });
+
+  const confirmPhone = run(async () => {
+    const p = phone.trim().replace(/[^0-9+]/g, "");
+    const { error } = await verifyPhoneCode(p.startsWith("+") ? p : `+82${p.replace(/^0/, "")}`, phoneCode.trim());
+    if (error) {
+      notify("인증 실패", error.message);
+      return;
+    }
+    await api.post("/identity/verify"); // 서버가 JWT의 phone_confirmed_at을 확인한다
     done();
   });
 
@@ -162,7 +198,39 @@ export default function LoginScreen({ navigation }: any) {
         </View>
 
         <View style={ui.card}>
-          {showProfileStep ? (
+          {needPhone ? (
+            <>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub }}>휴대폰 본인인증</Text>
+              <Text style={ui.hint}>아이를 맡고 맡기려면 본인인증이 필요해요 (I1)</Text>
+              <TextInput
+                style={ui.input}
+                placeholder="010-1234-5678"
+                placeholderTextColor={t.sub}
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={setPhone}
+                editable={!phoneSent}
+              />
+              {!phoneSent ? (
+                <Btn label={busy ? "보내는 중…" : "인증 문자 받기"} onPress={requestPhone} />
+              ) : (
+                <>
+                  <TextInput
+                    style={ui.input}
+                    placeholder="문자로 받은 6자리"
+                    placeholderTextColor={t.sub}
+                    keyboardType="number-pad"
+                    value={phoneCode}
+                    onChangeText={setPhoneCode}
+                  />
+                  <Btn label={busy ? "확인 중…" : "인증 완료"} onPress={confirmPhone} />
+                  <TouchableOpacity onPress={() => setPhoneSent(false)}>
+                    <Text style={[ui.hint, { textAlign: "center" }]}>번호 다시 입력</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </>
+          ) : showProfileStep ? (
             <>
               <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub }}>
                 {devMode ? "이름을 알려주세요" : "거의 다 됐어요 — 이름만 알려주세요"}
@@ -178,6 +246,36 @@ export default function LoginScreen({ navigation }: any) {
                 {tab("login", "로그인")}
                 {tab("magic", "메일 링크")}
               </View>
+
+              {socials.length > 0 && (
+                <View style={{ gap: 8, marginBottom: 10 }}>
+                  {socials.map((sp) => (
+                    <TouchableOpacity
+                      key={sp.id}
+                      style={{
+                        height: 52,
+                        borderRadius: 16,
+                        backgroundColor: sp.bg,
+                        borderWidth: sp.id === "google" ? 1.5 : 0,
+                        borderColor: t.border,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      onPress={run(async () => {
+                        const { error } = await signInWithSocial(sp.id);
+                        if (error) notify("로그인 실패", error.message);
+                      })}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: "700", color: sp.fg }}>{sp.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 }}>
+                    <View style={{ flex: 1, height: 1, backgroundColor: t.border }} />
+                    <Text style={{ fontSize: 12, color: t.sub }}>또는 이메일로</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: t.border }} />
+                  </View>
+                </View>
+              )}
 
               <TextInput
                 style={ui.input}

@@ -52,13 +52,32 @@ def me(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+@router.get("/identity/method")
+def identity_method():
+    """앱이 어떤 본인인증을 요구할지 알기 위해 조회 (로그인 전에도 가능)."""
+    return {"method": settings.identity_method}
+
+
 @router.post("/identity/verify", response_model=UserOut)
 def identity_verify(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
 ) -> User:
-    """본인인증 (I1의 실물 관문). 현재는 스텁 어댑터 — PASS류 확보 시 어댑터만 교체."""
-    if not identity.get_verifier().verify(user.id, user.name):
-        raise HTTPException(status_code=403, detail="본인인증 실패")
+    """본인인증 (I1의 실물 관문).
+
+    수단은 settings.identity_method로 고른다 (stub/email/phone).
+    phone·email은 Supabase가 끝낸 검증 사실을 JWT 클레임으로 확인한다 — 앱 주장 신뢰 금지.
+    """
+    claims: dict = {}
+    if authorization and authorization.lower().startswith("bearer "):
+        claims = auth_jwt.verify(authorization[7:])
+    elif settings.identity_method != "stub":
+        raise HTTPException(status_code=401, detail="Bearer 토큰 필요")
+
+    ok, reason = identity.get_verifier().verify(claims)
+    if not ok:
+        raise HTTPException(status_code=403, detail=reason)
     user.identity_verified = True
     db.flush()
     return user

@@ -144,3 +144,7 @@ export interface CareSession {
   handoff_ended_at: string | null;
   canceled_at: string | null;
 }
+
+export interface IdentityMethod {
+  method: "stub" | "email" | "phone";
+}
