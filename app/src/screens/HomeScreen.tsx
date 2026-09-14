@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { api, Child, CrewView } from "../api";
-import { Avatar, Btn, Columns, Page, PageHeader, Pill } from "../components";
+import { Avatar, Btn, Columns, Empty, Note, Page, PageHeader, Pill } from "../components";
+import { Icon } from "../Icon";
 import { notify } from "../notify";
 import { registerPush } from "../push";
 import { t, ui, useLayout } from "../ui";
@@ -70,9 +71,13 @@ export default function HomeScreen({ navigation }: any) {
 
   const crewList = (
     <View>
-      <Text style={ui.sectionTitle}>내 크루</Text>
+      <Text style={ui.sectionTitle}>내 모임</Text>
       {crews.length === 0 && (
-        <Text style={ui.hint}>아직 크루가 없어요 — 아래에서 만들거나, 초대 링크로 합류하세요</Text>
+        <Empty
+          icon="users"
+          title="아직 모임이 없어요"
+          body={"친한 가족 3~6집과 함께 시작해요.\n모임을 만들고 링크를 카톡방에 붙이면 끝이에요."}
+        />
       )}
       {crews.map((c) => {
         const active = c.status === "active";
@@ -84,20 +89,32 @@ export default function HomeScreen({ navigation }: any) {
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={ui.cardTitle}>{c.name}</Text>
-              <Pill label={active ? "활성" : "규약 합의 중"} tone={active ? "mint" : "lemon"} />
+              <Pill label={active ? "쓰는 중" : "준비 중"} tone={active ? "mint" : "lemon"} />
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
               <Avatar id={c.id} label={c.name} size={26} />
-              <Text style={{ fontSize: 13, color: t.sub }}>{c.member_count}가구</Text>
-              {!active && <Text style={{ fontSize: 12, color: t.lemonDeep, fontWeight: "700" }}>· 눌러서 이어가기</Text>}
+              <Text style={{ fontSize: 13, color: t.sub }}>{c.member_count}집</Text>
+              {!active && (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Icon name="chevron" size={13} color={t.lemonDeep} />
+                  <Text style={{ fontSize: 12, color: t.lemonDeep, fontWeight: "700" }}>눌러서 준비 마치기</Text>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
         );
       })}
 
-      <Text style={ui.sectionTitle}>크루 만들기</Text>
-      <TextInput style={ui.input} placeholder="크루 이름" placeholderTextColor={t.sub} value={crewName} onChangeText={setCrewName} />
+      <Text style={ui.sectionTitle}>모임 만들기</Text>
+      <TextInput
+        style={ui.input}
+        placeholder="예: 아파트 놀이터 모임"
+        placeholderTextColor={t.sub}
+        value={crewName}
+        onChangeText={setCrewName}
+      />
       <Btn label="만들기" onPress={createCrew} />
+      <Note icon="users">만들면 바로 다음 단계(규칙 정하기)로 안내해드려요. 혼자서도 먼저 만들어두고 나중에 초대할 수 있어요.</Note>
 
       <Text style={ui.sectionTitle}>초대받았나요?</Text>
       <TextInput
@@ -113,7 +130,14 @@ export default function HomeScreen({ navigation }: any) {
 
   const childPanel = (
     <View>
-      <Text style={ui.sectionTitle}>내 아이 ({children.length})</Text>
+      <Text style={ui.sectionTitle}>우리 아이</Text>
+      {children.length === 0 && (
+        <Empty
+          icon="heart"
+          title="아이를 먼저 등록해주세요"
+          body={"돌봄을 맡기려면 누구를 맡기는지 알아야 해요.\n이름과 태어난 달만 있으면 됩니다."}
+        />
+      )}
       {children.map((c) => (
         <View key={c.id} style={[ui.card, { flexDirection: "row", alignItems: "center", gap: 12 }]}>
           <Avatar id={c.id} label={c.name} size={40} />
@@ -140,7 +164,6 @@ export default function HomeScreen({ navigation }: any) {
         />
       </View>
       <Btn label="아이 등록" tone="soft" onPress={addChild} />
-      <Text style={ui.hint}>돌봄을 맡기려면 아이가 등록돼 있어야 해요 (보드의 “돌봄 필요” 칸)</Text>
     </View>
   );
 

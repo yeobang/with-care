@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, View } from "react-native";
 import { api, CrewView } from "../api";
-import { Avatar, Btn, Columns, Page, PageHeader, Pill } from "../components";
+import { Avatar, Btn, Columns, Empty, Note, Page, PageHeader, Pill, Steps } from "../components";
 import { notify } from "../notify";
 import { t, ui } from "../ui";
 
@@ -59,15 +59,14 @@ export default function CrewScreen({ route, navigation }: any) {
         </>
       ) : (
         <>
-          <Text style={ui.sectionTitle}>활성화 절차</Text>
-          <View style={[ui.card, { backgroundColor: t.lemonTint, borderColor: "#F3E4BE", shadowOpacity: 0 }]}>
-            <Text style={{ fontSize: 13, color: t.lemonDeep, lineHeight: 20 }}>
-              세 단계를 마쳐야 보드가 열려요 — 포괄 합의(I2) → 규약 확정(I7) → 활성화.
-              규약 없이 시작하는 크루는 만들지 않아요.
-            </Text>
-          </View>
+          <Text style={ui.sectionTitle}>시작 전 준비 (3단계)</Text>
+          <Steps items={["약속 확인", "규칙 정하기", "시작하기"]} current={charter?.is_complete ? 2 : 0} />
+          <Note icon="shield" tone="warn">
+            서로 얼굴 붉힐 일을 미리 없애는 단계예요. 책임 범위·사진·간식 같은 걸 먼저 정해두면,
+            나중에 “그건 말 안 했잖아”가 생기지 않아요.
+          </Note>
           <Btn
-            label="① 포괄 합의 (책임·사진·법정대리인)"
+            label="① 약속 확인하기 (책임·사진·보호자 동의)"
             onPress={act(() =>
               api.post(`/crews/${crewId}/consent`, {
                 liability_ack: true,
@@ -76,12 +75,12 @@ export default function CrewScreen({ route, navigation }: any) {
               }),
             )}
           />
-          <Btn label="② 규약 확정" tone="soft" onPress={act(() => api.post(`/crews/${crewId}/charter/confirm`, {}))} />
-          <Btn label="③ 크루 활성화" tone="deep" onPress={act(() => api.post(`/crews/${crewId}/activate`))} />
+          <Btn label="② 우리 규칙 정하기" tone="soft" onPress={act(() => api.post(`/crews/${crewId}/charter/confirm`, {}))} />
+          <Btn label="③ 시작하기" tone="deep" onPress={act(() => api.post(`/crews/${crewId}/activate`))} />
         </>
       )}
 
-      <Text style={ui.sectionTitle}>이웃 초대</Text>
+      <Text style={ui.sectionTitle}>이웃 초대하기</Text>
       <Btn
         label="초대 링크 만들기"
         tone={active ? "soft" : "ghost"}
@@ -103,14 +102,14 @@ export default function CrewScreen({ route, navigation }: any) {
 
   const sideCol = (
     <View>
-      <Text style={ui.sectionTitle}>우리 크루 규약</Text>
+      <Text style={ui.sectionTitle}>우리 규칙</Text>
       {charter && (
         <View style={[ui.card, { backgroundColor: t.deep, borderColor: t.deep }]}>
           {[
-            ["정산 모드", charter.settlement_mode],
-            ["1크레딧(1시간)", `${charter.credit_price_krw.toLocaleString()}원`],
-            ["호스트 사례", `${charter.host_fee_krw.toLocaleString()}원`],
-            ["노쇼 벌금", `${charter.no_show_fine_krw.toLocaleString()}원`],
+            ["정산 방식", charter.settlement_mode === "credit" ? "기록 + 월말 정산" : charter.settlement_mode === "rotation" ? "번갈아 하기" : "기록만"],
+            ["1시간 돌봄의 값", `${charter.credit_price_krw.toLocaleString()}원`],
+            ["집 빌려준 사례비", `${charter.host_fee_krw.toLocaleString()}원`],
+            ["갑자기 못 왔을 때", `${charter.no_show_fine_krw.toLocaleString()}원`],
           ].map(([k, v]) => (
             <View key={k} style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
               <Text style={{ fontSize: 13, color: t.deepSub }}>{k}</Text>
@@ -118,14 +117,14 @@ export default function CrewScreen({ route, navigation }: any) {
             </View>
           ))}
           <Text style={{ fontSize: 11, color: t.deepSub, marginTop: 4 }}>
-            {charter.is_complete ? "확정됨 · 규약은 크루가 정하고 앱은 집행만 해요" : "미확정 — 확정해야 활성화돼요"}
+            {charter.is_complete ? "정해졌어요 · 규칙은 여러분이 정하고 앱은 지키기만 해요" : "아직 안 정했어요 — 정해야 시작할 수 있어요"}
           </Text>
         </View>
       )}
 
-      <Text style={ui.sectionTitle}>노쇼·급취소 기록</Text>
+      <Text style={ui.sectionTitle}>약속 못 지킨 기록</Text>
       {badges.length === 0 ? (
-        <Text style={ui.hint}>기록 없음 — 깨끗해요</Text>
+        <Text style={ui.hint}>아직 없어요 — 모두 잘 지키고 있어요</Text>
       ) : (
         <>
           {badges.map((b) => (
@@ -150,8 +149,8 @@ export default function CrewScreen({ route, navigation }: any) {
     <Page wide>
       <PageHeader
         title={crew.name}
-        sub={`${active ? "활성 크루" : "규약 합의 중"} · ${crew.member_count}가구`}
-        right={<Pill label={active ? "활성" : "합의 중"} tone={active ? "mint" : "lemon"} />}
+        sub={`${active ? "쓰는 중" : "준비 중"} · ${crew.member_count}집`}
+        right={<Pill label={active ? "쓰는 중" : "준비 중"} tone={active ? "mint" : "lemon"} />}
       />
       <Columns left={mainCol} right={sideCol} />
     </Page>

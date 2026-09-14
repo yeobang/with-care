@@ -10,6 +10,7 @@ import HomeScreen from "./src/screens/HomeScreen";
 import LedgerScreen from "./src/screens/LedgerScreen";
 import SitterScreen from "./src/screens/SitterScreen";
 import InviteScreen from "./src/screens/InviteScreen";
+import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/supabase";
 
@@ -22,7 +23,8 @@ const linking: LinkingOptions<{}> = {
     screens: {
       Invite: "invite/:token",
       Home: "home",
-      Login: "",
+      Login: "login",
+      Landing: "",
     },
   },
 };
@@ -52,7 +54,8 @@ export default function App() {
   return (
     <NavigationContainer linking={linking}>
       <StatusBar style="auto" />
-      <Stack.Navigator initialRouteName={loggedIn ? "Home" : "Login"}>
+      <Stack.Navigator initialRouteName={loggedIn ? "Home" : "Landing"}>
+        <Stack.Screen name="Landing" component={LandingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: "with-care" }} />

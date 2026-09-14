@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { ScrollView, Text, TouchableOpacity, View, ViewStyle } from "react-native";
+import { Icon, IconName } from "./Icon";
 import { t, tintFor, ui, useLayout } from "./ui";
 
 /** 넓은 화면에서 중앙 정렬 + 최대폭 제한. 모든 화면의 바깥 껍데기. */
@@ -134,6 +135,89 @@ export function StatTiles({ items }: { items: { label: string; value: string; no
           {!!it.note && <Text style={{ fontSize: 12, color: t.sub, marginTop: 4 }}>{it.note}</Text>}
         </View>
       ))}
+    </View>
+  );
+}
+
+
+/** 빈 화면 — 뭘 해야 하는지 알려주는 자리. 그냥 비워두지 않는다. */
+export function Empty({
+  icon,
+  title,
+  body,
+  action,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        paddingVertical: 34,
+        paddingHorizontal: 22,
+        backgroundColor: t.card,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: t.border,
+        borderStyle: "dashed",
+        marginBottom: 12,
+      }}
+    >
+      <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: t.mintTint, alignItems: "center", justifyContent: "center" }}>
+        <Icon name={icon} size={26} color={t.mintDeep} />
+      </View>
+      <Text style={{ fontSize: 16, fontWeight: "700", color: t.ink, marginTop: 14 }}>{title}</Text>
+      <Text style={{ fontSize: 13, color: t.sub, marginTop: 6, textAlign: "center", lineHeight: 20 }}>{body}</Text>
+      {!!action && <View style={{ alignSelf: "stretch", marginTop: 6 }}>{action}</View>}
+    </View>
+  );
+}
+
+/** 진행 단계 표시 — "지금 어디쯤인지"를 항상 보여준다. */
+export function Steps({ items, current }: { items: string[]; current: number }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+      {items.map((label, i) => {
+        const done = i < current;
+        const now = i === current;
+        return (
+          <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 999,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: done ? t.mint : now ? t.lemon : t.border,
+              }}
+            >
+              {done ? (
+                <Icon name="check" size={13} color="#fff" width={2.6} />
+              ) : (
+                <Text style={{ fontSize: 11, fontWeight: "700", color: now ? "#fff" : t.sub }}>{i + 1}</Text>
+              )}
+            </View>
+            <Text style={{ fontSize: 12, fontWeight: now ? "700" : "400", color: now ? t.ink : t.sub }}>{label}</Text>
+            {i < items.length - 1 && <View style={{ width: 14, height: 2, borderRadius: 9, backgroundColor: t.border }} />}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 아이콘이 붙은 줄 — 안내문에 쓴다. */
+export function Note({ icon, children, tone = "neutral" }: { icon: IconName; children: ReactNode; tone?: "neutral" | "warn" }) {
+  const bg = tone === "warn" ? t.lemonTint : t.bg;
+  const fg = tone === "warn" ? t.lemonDeep : t.sub;
+  return (
+    <View style={{ flexDirection: "row", gap: 10, backgroundColor: bg, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+      <Icon name={icon} size={17} color={fg} />
+      <Text style={{ flex: 1, fontSize: 13, color: fg, lineHeight: 20 }}>{children}</Text>
     </View>
   );
 }
