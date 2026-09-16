@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain import community_service as cs
 from app.domain.models import Comment, Post, PostCategory, PostScope, User
@@ -76,6 +77,7 @@ class CommentIn(BaseModel):
 @router.post("/posts/{post_id}/comments")
 def add_comment(post_id: str, body: CommentIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     c = cs.add_comment(db, post_id, user, body.body, body.anonymous)
+    notifications.notify_comment(db, cs.get_post(db, post_id, user), c, user)  # best-effort
     return _comment_out(db, c, user)
 
 

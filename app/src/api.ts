@@ -237,3 +237,25 @@ export async function del<T>(path: string): Promise<T> {
   if (!res.ok) throw new ApiError(res.status, data.detail ?? "요청 실패", data.invariant);
   return data as T;
 }
+
+/* ── 채팅 (§28) ── */
+
+export interface ChatRoomSummary {
+  id: string;
+  kind: "crew" | "dm";
+  crew_id: string;
+  crew_name: string;
+  title: string;
+  context_kind: string | null;
+  last_body: string | null;
+  last_at: string | null;
+  unread: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  deleted: boolean;
+  sender: { id: string; name: string; is_me: boolean };
+  created_at: string;
+}

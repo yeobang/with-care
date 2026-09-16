@@ -71,6 +71,7 @@ export function NavBar({ navigation, crewId, crewName, active }: {
         )}
         {[
           { key: "town", label: "동네", icon: "users" as IconName, screen: "Community" },
+          { key: "chat", label: "대화", icon: "brief" as IconName, screen: "Chats" },
           { key: "alerts", label: "알림", icon: "bell" as IconName, screen: "Alerts" },
           { key: "me", label: "내 정보", icon: "heart" as IconName, screen: "Me" },
         ].map((l) => (

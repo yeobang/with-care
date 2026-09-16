@@ -403,6 +403,52 @@ class SessionIncident(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+# --- 채팅 (§28) ---
+
+
+class RoomKind(enum.StrEnum):
+    CREW = "crew"   # 모임 단체방 (크루당 1개, 자동 생성)
+    DM = "dm"       # 1:1 — 같은 모임 멤버끼리만 (§28 안전 경계)
+
+
+class ChatRoom(Base):
+    """대화방. context_*가 있으면 '대상이 붙은 대화' — 그 건을 열면 대화가 거기 있다."""
+
+    __tablename__ = "chat_rooms"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    kind: Mapped[RoomKind] = mapped_column(String(10))
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))  # DM도 어느 모임 안인지 기록
+    # 대화가 붙은 대상 (세션·후보·정산). 없으면 일반 대화
+    context_kind: Mapped[str | None] = mapped_column(String(20), default=None)
+    context_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class ChatMember(Base):
+    __tablename__ = "chat_members"
+    __table_args__ = (UniqueConstraint("room_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    room_id: Mapped[str] = mapped_column(ForeignKey("chat_rooms.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    last_read_at: Mapped[datetime | None] = mapped_column(default=None)
+    joined_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class ChatMessage(Base):
+    """텍스트 전용 (§28: 사진 우회 반출 경로를 만들지 않는다). 삭제는 무효화."""
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    room_id: Mapped[str] = mapped_column(ForeignKey("chat_rooms.id"))
+    sender_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    body: Mapped[str] = mapped_column(String(2000))
+    deleted_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
 # --- 커뮤니티 (§27) ---
 
 

@@ -20,8 +20,14 @@ from app.domain.models import (
     Crew,
     CrewMember,
     CrewStatus,
+    ChatMember,
+    ChatMessage,
+    ChatRoom,
+    Comment,
     LedgerEntry,
     Notification,
+    Post,
+    RoomKind,
     PushToken,
     SessionIncident,
     Settlement,
@@ -186,6 +192,37 @@ def notify_recurrence(db: DbSession, crew_id: str) -> None:
         db, {m.user_id for m in members}, "상시성 주의",
         "같은 시터와의 돌봄이 이번 주 2회 이상이에요 — 정기 돌봄은 자격·등록 통로 검토를 권해요",
     )
+
+
+def notify_chat(db: DbSession, msg: ChatMessage, sender) -> None:
+    """새 메시지 — 보낸 사람 빼고 같은 방 사람들에게. 본문은 미리보기만.
+
+    단체방의 수신자는 **크루 멤버 전원**이다. 방에 아직 들어와 본 적 없는 멤버도
+    알림을 받아야 대화가 시작된다 (chat_members는 '열어본 적 있는 사람'일 뿐이다).
+    DM은 그 방의 두 사람만.
+    """
+    room = db.get(ChatRoom, msg.room_id)
+    if room is not None and room.kind == RoomKind.CREW:
+        targets = {
+            m.user_id
+            for m in db.scalars(select(CrewMember).where(CrewMember.crew_id == room.crew_id)).all()
+        } - {sender.id}
+    else:
+        targets = {
+            m.user_id
+            for m in db.scalars(select(ChatMember).where(ChatMember.room_id == msg.room_id)).all()
+        } - {sender.id}
+    preview = msg.body if len(msg.body) <= 60 else msg.body[:60] + "…"
+    _send_to(db, targets, f"{sender.name}님의 메시지", preview, room.crew_id if room else None)
+
+
+def notify_comment(db: DbSession, post: Post, comment: Comment, commenter) -> None:
+    """내 글에 댓글이 달리면 알린다 (익명 댓글은 이름을 가린다)."""
+    if post.author_id == commenter.id:
+        return  # 자기 글에 자기가 단 댓글
+    who = "익명" if comment.anonymous else commenter.name
+    preview = comment.body if len(comment.body) <= 60 else comment.body[:60] + "…"
+    _send_to(db, {post.author_id}, f"{who}님이 댓글을 남겼어요", f"'{post.title}' — {preview}", post.crew_id)
 
 
 ROTATION_BALANCE_THRESHOLD = 4  # §24-3 가정: 아이·시간. 전역 기본 — 추후 규약화 후보

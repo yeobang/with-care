@@ -13,6 +13,8 @@ import InviteScreen from "./src/screens/InviteScreen";
 import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import AlertsScreen from "./src/screens/AlertsScreen";
+import ChatListScreen from "./src/screens/ChatListScreen";
+import ChatRoomScreen from "./src/screens/ChatRoomScreen";
 import CommunityScreen from "./src/screens/CommunityScreen";
 import PostScreen from "./src/screens/PostScreen";
 import WriteScreen from "./src/screens/WriteScreen";
@@ -34,6 +36,8 @@ const linking: LinkingOptions<{}> = {
       Onboarding: "start",
       Alerts: "alerts",
       Community: "town",
+      Chats: "chats",
+      ChatRoom: "chat/:roomId",
       Post: "post/:postId",
       Write: "write",
       Me: "me",
@@ -78,6 +82,8 @@ export default function App() {
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Alerts" component={AlertsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Community" component={CommunityScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Chats" component={ChatListScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="ChatRoom" component={ChatRoomScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Post" component={PostScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Write" component={WriteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Me" component={MeScreen} options={{ headerShown: false }} />

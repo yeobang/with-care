@@ -65,6 +65,14 @@ export default function CrewScreen({ route, navigation }: any) {
           <Btn label="주간 보드 열기" onPress={() => navigation.navigate("Board", { crewId, name: crew.name })} />
           <Btn label="장부·정산 열기" tone="soft" onPress={() => navigation.navigate("Ledger", { crewId, name: crew.name })} />
           <Btn label="시터 공구 열기" tone="ghost" onPress={() => navigation.navigate("Sitter", { crewId, name: crew.name })} />
+          <Btn
+            label="모임 단체방 열기"
+            tone="soft"
+            onPress={act(async () => {
+              const r = await api.post<{ id: string }>(`/crews/${crewId}/chat`);
+              navigation.navigate("ChatRoom", { roomId: r.id, title: crew.name });
+            })}
+          />
         </>
       ) : (
         <>

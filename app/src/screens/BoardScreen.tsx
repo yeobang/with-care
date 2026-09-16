@@ -382,6 +382,14 @@ export default function BoardScreen({ route, navigation }: any) {
               {s.handoff_started_at && !s.handoff_ended_at && (
                 <Btn label="데려왔어요" style={{ flex: 1 }} onPress={guard(() => api.post(`/sessions/${s.id}/handoff/end`))} />
               )}
+              <Btn
+                label="이 돌봄 이야기"
+                tone="ghost"
+                onPress={guard(async () => {
+                  const r = await api.post<{ id: string }>(`/crews/${crewId}/chat/session/${s.id}`);
+                  navigation.navigate("ChatRoom", { roomId: r.id, title: `${s.date} 돌봄` });
+                })}
+              />
               {myId && myId !== s.caregiver_id && (
                 <Btn
                   label="안 왔어요 기록"
