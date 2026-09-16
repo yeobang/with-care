@@ -33,7 +33,11 @@ export default function LoginScreen({ navigation }: any) {
   const [phoneCode, setPhoneCode] = useState("");
   const [phoneSent, setPhoneSent] = useState(false);
 
-  const done = () => navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+  const done = async () => {
+    // 온보딩을 아직 안 봤으면 먼저 보여준다 (처음 들어온 사람에게 "이게 뭔지" 설명)
+    const seen = await AsyncStorage.getItem("onboarded.v1");
+    navigation.reset({ index: 0, routes: [{ name: seen ? "Home" : "Onboarding" }] });
+  };
 
   /** 로그인 성공 후: 프로필 있으면 홈, 없으면 이름 입력 단계로. */
   const ensureProfile = async () => {
@@ -73,7 +77,7 @@ export default function LoginScreen({ navigation }: any) {
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) ensureProfile();
+      if (data.session) void ensureProfile();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

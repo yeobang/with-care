@@ -12,6 +12,7 @@ import SitterScreen from "./src/screens/SitterScreen";
 import InviteScreen from "./src/screens/InviteScreen";
 import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import OnboardingScreen, { ONBOARDED_KEY } from "./src/screens/OnboardingScreen";
 import { supabase } from "./src/supabase";
 import { ToastHost } from "./src/Toast";
 
@@ -25,6 +26,7 @@ const linking: LinkingOptions<{}> = {
       Invite: "invite/:token",
       Home: "home",
       Login: "login",
+      Onboarding: "start",
       Landing: "",
     },
   },
@@ -33,6 +35,7 @@ const linking: LinkingOptions<{}> = {
 export default function App() {
   const [ready, setReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [onboarded, setOnboarded] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -45,6 +48,7 @@ export default function App() {
         }
       }
       if (!ok) ok = !!(await AsyncStorage.getItem("userId")); // dev 헤더 폴백
+      setOnboarded(!!(await AsyncStorage.getItem(ONBOARDED_KEY)));
       setLoggedIn(ok);
       setReady(true);
     })();
@@ -56,9 +60,10 @@ export default function App() {
     <NavigationContainer linking={linking}>
       <StatusBar style="auto" />
       <ToastHost />
-      <Stack.Navigator initialRouteName={loggedIn ? "Home" : "Landing"}>
+      <Stack.Navigator initialRouteName={loggedIn ? (onboarded ? "Home" : "Onboarding") : "Landing"}>
         <Stack.Screen name="Landing" component={LandingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen

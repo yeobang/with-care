@@ -74,8 +74,52 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
+  // 처음 들어온 사람이 "뭘 해야 하지"를 묻지 않게 — 남은 할 일만 보여준다
+  const hasChild = children.length > 0;
+  const hasCrew = crews.length > 0;
+  const hasActive = crews.some((c) => c.status === "active");
+  const allDone = hasChild && hasCrew && hasActive;
+
+  const checklist = !loading && !allDone && (
+    <View style={[ui.card, { backgroundColor: t.mintTint, borderColor: "#CFEBE2", shadowOpacity: 0 }]}>
+      <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }}>시작하기</Text>
+      <Text style={{ fontSize: 12, color: t.sub, marginTop: 4, marginBottom: 12 }}>
+        세 가지만 하면 이번 주부터 쓸 수 있어요
+      </Text>
+      {[
+        { done: hasChild, label: "우리 아이 등록하기", hint: "이름과 태어난 달만" },
+        { done: hasCrew, label: "모임 만들거나 합류하기", hint: "친한 가족 3~6집" },
+        { done: hasActive, label: "규칙 정하고 시작하기", hint: "모임 화면에서 3단계" },
+      ].map((it) => (
+        <View key={it.label} style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <View
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 999,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: it.done ? t.mint : t.card,
+              borderWidth: it.done ? 0 : 1.5,
+              borderColor: t.border,
+            }}
+          >
+            {it.done && <Icon name="check" size={13} color="#fff" width={2.6} />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: it.done ? "400" : "700", color: it.done ? t.sub : t.ink, textDecorationLine: it.done ? "line-through" : "none" }}>
+              {it.label}
+            </Text>
+            {!it.done && <Text style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>{it.hint}</Text>}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+
   const crewList = (
     <View>
+      {checklist}
       <Text style={ui.sectionTitle}>내 모임</Text>
       {loading && <SkeletonCard lines={2} />}
       {!loading && crews.length === 0 && (
