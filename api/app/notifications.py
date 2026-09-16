@@ -21,6 +21,7 @@ from app.domain.models import (
     CrewMember,
     CrewStatus,
     LedgerEntry,
+    Notification,
     PushToken,
     SessionIncident,
     Settlement,
@@ -34,8 +35,18 @@ from app.infra import push
 log = logging.getLogger(__name__)
 
 
-def _send_to(db: DbSession, user_ids: set[str], title: str, body: str) -> None:
-    """토큰 있는 수신자에게만 발송. 죽은 토큰(DeviceNotRegistered)은 정리."""
+def _send_to(db: DbSession, user_ids: set[str], title: str, body: str, crew_id: str | None = None) -> None:
+    """알림함에 남기고, 토큰 있는 수신자에게 푸시. 죽은 토큰은 정리.
+
+    푸시는 놓칠 수 있으므로 앱 안 기록이 먼저다 — 발송이 실패해도 알림함에는 남는다.
+    """
+    try:
+        for uid in user_ids:
+            db.add(Notification(user_id=uid, crew_id=crew_id, title=title, body=body[:400]))
+        db.flush()
+    except Exception:
+        log.warning("알림 기록 실패", exc_info=True)
+
     try:
         rows = db.scalars(
             select(PushToken).where(PushToken.user_id.in_(list(user_ids)))

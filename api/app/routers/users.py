@@ -129,3 +129,59 @@ def update_child(
 ) -> Child:
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     return svc.update_child(db, user, child_id, **updates)
+
+
+# --- 내 정보 / 알림함 ---
+
+
+class ProfileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(body: ProfileIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    user.name = body.name
+    db.flush()
+    return user
+
+
+@router.get("/me/notifications")
+def my_notifications(
+    limit: int = 30,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """내 알림함 (I6: 본인 것만). 상한을 둬 무한 반환하지 않는다."""
+    from app.domain.models import Notification
+
+    rows = db.scalars(
+        select(Notification)
+        .where(Notification.user_id == user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(min(max(limit, 1), 100))
+    ).all()
+    return [
+        {
+            "id": n.id,
+            "crew_id": n.crew_id,
+            "title": n.title,
+            "body": n.body,
+            "created_at": n.created_at.isoformat(),
+            "read": n.read_at is not None,
+        }
+        for n in rows
+    ]
+
+
+@router.post("/me/notifications/read")
+def mark_notifications_read(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """모두 읽음 처리 — 멱등."""
+    from app.domain.models import Notification, _now
+
+    rows = db.scalars(
+        select(Notification).where(Notification.user_id == user.id, Notification.read_at.is_(None))
+    ).all()
+    for n in rows:
+        n.read_at = _now()
+    db.flush()
+    return {"marked": len(rows)}

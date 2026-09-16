@@ -400,6 +400,23 @@ class SessionIncident(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+# --- 알림함 (앱 안에서 다시 볼 수 있게) ---
+
+
+class Notification(Base):
+    """보낸 알림의 사본. 푸시는 놓칠 수 있으니 앱 안에 남긴다 (I6: 수신자 본인만 조회)."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    crew_id: Mapped[str | None] = mapped_column(ForeignKey("crews.id"), default=None)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(String(400))
+    read_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
 # --- P7: 푸시 ---
 
 

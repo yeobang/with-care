@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { api, Child, CrewView } from "../api";
-import { Avatar, Btn, Columns, Empty, NavBar, Note, Page, PageHeader, Pill } from "../components";
+import { Avatar, Btn, Columns, Empty, NavBar, Note, Page, PageHeader, Pill, StatTiles } from "../components";
+import { TabBar } from "../TabBar";
 import { MonthPicker, SkeletonCard } from "../pickers";
 import { Icon } from "../Icon";
 import { notify, notifyError } from "../notify";
@@ -213,9 +214,22 @@ export default function HomeScreen({ navigation }: any) {
     </View>
   );
 
+  const activeCrews = crews.filter((c) => c.status === "active").length;
+  const summary = allDone && (
+    <StatTiles
+      items={[
+        { label: "우리 모임", value: `${crews.length}개`, note: `${activeCrews}개 사용 중`, tone: "mint" },
+        { label: "우리 아이", value: `${children.length}명`, note: "정보는 내 정보에서 수정", tone: "lemon" },
+        { label: "지금 할 일", value: "보드 확인", note: "이번 주 되는 시간을 눌러주세요", tone: "coral" },
+      ]}
+    />
+  );
+
   return (
+    <View style={{ flex: 1, backgroundColor: t.bg }}>
     <Page wide nav={<NavBar navigation={navigation} />}>
       <PageHeader title="안녕하세요" sub="이번 주 돌봄, 제가 챙길게요" />
+      {summary}
       {isWide ? <Columns left={crewList} right={childPanel} /> : (
         <View>
           {crewList}
@@ -223,5 +237,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       )}
     </Page>
+    <TabBar navigation={navigation} active="home" />
+    </View>
   );
 }

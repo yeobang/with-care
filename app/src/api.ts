@@ -52,6 +52,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
 };
 
 export async function uploadSessionPhoto(sessionId: string, uri: string): Promise<void> {
@@ -156,4 +157,37 @@ export interface CareSession {
 
 export interface IdentityMethod {
   method: "stub" | "email" | "phone";
+}
+
+export interface AppNotification {
+  id: string;
+  crew_id: string | null;
+  title: string;
+  body: string;
+  created_at: string;
+  read: boolean;
+}
+
+/** "3시간 전" 같은 상대 시간 — 목록에서 절대시각보다 읽기 쉽다 */
+export function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "방금";
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}일 전`;
+  return iso.slice(0, 10);
+}
+
+export async function signOut() {
+  const { supabase } = await import("./supabase");
+  try {
+    await supabase?.auth.signOut();
+  } catch {
+    // 무시 — 아래에서 로컬 흔적을 지운다
+  }
+  const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
+  await AsyncStorage.multiRemove([LOCAL_TOKEN_KEY, "userId"]);
 }

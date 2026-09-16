@@ -12,6 +12,8 @@ import SitterScreen from "./src/screens/SitterScreen";
 import InviteScreen from "./src/screens/InviteScreen";
 import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import AlertsScreen from "./src/screens/AlertsScreen";
+import MeScreen from "./src/screens/MeScreen";
 import OnboardingScreen, { ONBOARDED_KEY } from "./src/screens/OnboardingScreen";
 import { supabase } from "./src/supabase";
 import { ToastHost } from "./src/Toast";
@@ -27,6 +29,8 @@ const linking: LinkingOptions<{}> = {
       Home: "home",
       Login: "login",
       Onboarding: "start",
+      Alerts: "alerts",
+      Me: "me",
       Landing: "",
     },
   },
@@ -66,6 +70,8 @@ export default function App() {
         <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Alerts" component={AlertsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Me" component={MeScreen} options={{ headerShown: false }} />
         <Stack.Screen
           name="Crew"
           component={CrewScreen}

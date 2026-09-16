@@ -41,7 +41,8 @@ export function NavBar({ navigation, crewId, crewName, active }: {
         {isWide && <Text style={[ui.display, { fontSize: 18 }]}>with-care</Text>}
       </TouchableOpacity>
 
-      {!!crewId && (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, flexWrap: "wrap" }}>
+        {!!crewId && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, flexWrap: "wrap" }}>
           {links.map((l) => {
             const on = l.key === active;
@@ -67,7 +68,21 @@ export function NavBar({ navigation, crewId, crewName, active }: {
             );
           })}
         </View>
-      )}
+        )}
+        {[
+          { key: "alerts", label: "알림", icon: "bell" as IconName, screen: "Alerts" },
+          { key: "me", label: "내 정보", icon: "heart" as IconName, screen: "Me" },
+        ].map((l) => (
+          <TouchableOpacity
+            key={l.key}
+            style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 12 }}
+            onPress={() => navigation.navigate(l.screen)}
+          >
+            <Icon name={l.icon} size={16} color={t.sub} />
+            {isWide && <Text style={{ fontSize: 13, color: t.sub }}>{l.label}</Text>}
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
