@@ -13,6 +13,9 @@ import InviteScreen from "./src/screens/InviteScreen";
 import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import AlertsScreen from "./src/screens/AlertsScreen";
+import CommunityScreen from "./src/screens/CommunityScreen";
+import PostScreen from "./src/screens/PostScreen";
+import WriteScreen from "./src/screens/WriteScreen";
 import MeScreen from "./src/screens/MeScreen";
 import OnboardingScreen, { ONBOARDED_KEY } from "./src/screens/OnboardingScreen";
 import { supabase } from "./src/supabase";
@@ -30,6 +33,9 @@ const linking: LinkingOptions<{}> = {
       Login: "login",
       Onboarding: "start",
       Alerts: "alerts",
+      Community: "town",
+      Post: "post/:postId",
+      Write: "write",
       Me: "me",
       Landing: "",
     },
@@ -71,6 +77,9 @@ export default function App() {
         <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Alerts" component={AlertsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Community" component={CommunityScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Post" component={PostScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Write" component={WriteScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Me" component={MeScreen} options={{ headerShown: false }} />
         <Stack.Screen
           name="Crew"

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Text, View } from "react-native";
-import { api, CrewView } from "../api";
+import { Text, TouchableOpacity, View } from "react-native";
+import { api, CrewView, Post, timeAgo } from "../api";
 import { Avatar, Btn, Columns, NavBar, Note, Page, PageHeader, Pill, Steps } from "../components";
 import { SkeletonCard } from "../pickers";
 import { notify, notifyError } from "../notify";
@@ -29,11 +29,13 @@ export default function CrewScreen({ route, navigation }: any) {
   const [charter, setCharter] = useState<Charter | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
   const [badges, setBadges] = useState<IncidentBadge[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
 
   const load = useCallback(() => {
     api.get<CrewView>(`/crews/${crewId}`).then(setCrew).catch(() => {});
     api.get<Charter>(`/crews/${crewId}/charter`).then(setCharter).catch(() => {});
     api.get<IncidentBadge[]>(`/crews/${crewId}/incidents`).then(setBadges).catch(() => {});
+    api.get<Post[]>(`/posts?scope=crew&crew_id=${crewId}&limit=5`).then(setPosts).catch(() => {});
   }, [crewId]);
   useFocusEffect(load);
 
@@ -128,6 +130,26 @@ export default function CrewScreen({ route, navigation }: any) {
             {charter.is_complete ? "정해졌어요 · 규칙은 여러분이 정하고 앱은 지키기만 해요" : "아직 안 정했어요 — 정해야 시작할 수 있어요"}
           </Text>
         </View>
+      )}
+
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 22 }}>
+        <Text style={[ui.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>모임 이야기</Text>
+        <TouchableOpacity onPress={() => navigation.navigate("Write", { scope: "crew", crewId })}>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: t.mintDeep }}>글쓰기</Text>
+        </TouchableOpacity>
+      </View>
+      {posts.length === 0 ? (
+        <Text style={ui.hint}>공지나 후기를 남겨보세요 — 이 모임 멤버만 볼 수 있어요</Text>
+      ) : (
+        posts.map((p) => (
+          <TouchableOpacity key={p.id} style={ui.card} onPress={() => navigation.navigate("Post", { postId: p.id })}>
+            <Text style={ui.cardTitle}>{p.title}</Text>
+            <Text numberOfLines={1} style={{ fontSize: 13, color: t.sub, marginTop: 5 }}>{p.body}</Text>
+            <Text style={{ fontSize: 11, color: t.sub, marginTop: 8 }}>
+              {p.author.name} · {timeAgo(p.created_at)} · 댓글 {p.comment_count}
+            </Text>
+          </TouchableOpacity>
+        ))
       )}
 
       <Text style={ui.sectionTitle}>약속 못 지킨 기록</Text>

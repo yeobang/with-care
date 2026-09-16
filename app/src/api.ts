@@ -191,3 +191,49 @@ export async function signOut() {
   const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
   await AsyncStorage.multiRemove([LOCAL_TOKEN_KEY, "userId"]);
 }
+
+/* ── 커뮤니티 (§27) ── */
+
+export type PostScope = "town" | "crew";
+export type PostCategory = "question" | "tip" | "news" | "notice";
+
+export interface PostAuthor {
+  id: string | null;
+  name: string;
+  is_me: boolean;
+}
+
+export interface Post {
+  id: string;
+  scope: PostScope;
+  category: PostCategory;
+  title: string;
+  body: string;
+  author: PostAuthor;
+  created_at: string;
+  likes: number;
+  liked: boolean;
+  comment_count: number;
+  town_name: string | null;
+}
+
+export interface PostComment {
+  id: string;
+  body: string;
+  author: PostAuthor;
+  created_at: string;
+}
+
+export const CATEGORY_LABEL: Record<PostCategory, string> = {
+  question: "궁금해요",
+  tip: "이렇게 해요",
+  news: "동네 소식",
+  notice: "공지",
+};
+
+export async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE", headers: await authHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.detail ?? "요청 실패", data.invariant);
+  return data as T;
+}

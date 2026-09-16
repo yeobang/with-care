@@ -70,6 +70,7 @@ export function NavBar({ navigation, crewId, crewName, active }: {
         </View>
         )}
         {[
+          { key: "town", label: "동네", icon: "users" as IconName, screen: "Community" },
           { key: "alerts", label: "알림", icon: "bell" as IconName, screen: "Alerts" },
           { key: "me", label: "내 정보", icon: "heart" as IconName, screen: "Me" },
         ].map((l) => (

@@ -4,11 +4,11 @@ import { api, AppNotification } from "./api";
 import { Icon, IconName } from "./Icon";
 import { t, useLayout } from "./ui";
 
-export type TabKey = "home" | "crews" | "alerts" | "me";
+export type TabKey = "home" | "town" | "alerts" | "me";
 
 const TABS: { key: TabKey; label: string; icon: IconName; screen: string }[] = [
   { key: "home", label: "홈", icon: "home", screen: "Home" },
-  { key: "crews", label: "모임", icon: "users", screen: "Home" },
+  { key: "town", label: "동네", icon: "users", screen: "Community" },
   { key: "alerts", label: "알림", icon: "bell", screen: "Alerts" },
   { key: "me", label: "내 정보", icon: "heart", screen: "Me" },
 ];

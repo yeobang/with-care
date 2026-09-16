@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.domain.errors import InvariantViolation
-from app.routers import board, crews, health, ledger, oauth, photos, push, sitters, users
+from app.routers import board, community, crews, health, ledger, oauth, photos, push, sitters, users
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(ledger.router)
 app.include_router(push.router)
 app.include_router(sitters.router)
 app.include_router(oauth.router)
+app.include_router(community.router)
 
 
 @app.exception_handler(InvariantViolation)

@@ -44,6 +44,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(50))
     # MVP: Supabase Auth 계정 + 플래그. 본인인증(PASS) 연동은 P6 이후 (docs/03-dev-plan.md)
     identity_verified: Mapped[bool] = mapped_column(default=False)
+    # §27: 동네 게시판 기준. 행정동 코드까지만 — 좌표·상세주소는 저장하지 않는다
+    town_code: Mapped[str | None] = mapped_column(String(20), default=None)
+    town_name: Mapped[str | None] = mapped_column(String(50), default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
@@ -397,6 +400,64 @@ class SessionIncident(Base):
     offender_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     kind: Mapped[IncidentKind] = mapped_column(String(12))
     fine_krw: Mapped[int] = mapped_column()  # 기록 시점 규약(no_show_fine_krw) 스냅샷
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+# --- 커뮤니티 (§27) ---
+
+
+class PostScope(enum.StrEnum):
+    CREW = "crew"   # 모임 이야기판 — 멤버만 (I6)
+    TOWN = "town"   # 동네 게시판 — 행정동 공개. 크루 데이터 미참조, 텍스트 전용
+
+
+class PostCategory(enum.StrEnum):
+    QUESTION = "question"   # 궁금해요
+    TIP = "tip"             # 이렇게 해요
+    NEWS = "news"           # 동네 소식
+    NOTICE = "notice"       # 모임 공지 (crew scope 전용)
+
+
+class Post(Base):
+    """게시글. 공개(town) 글은 텍스트 전용이며 크루·아이·장부를 참조하지 않는다 (§27).
+
+    익명 글도 author_id는 저장한다 — 신고·분쟁 대비 (응답에서만 가린다).
+    """
+
+    __tablename__ = "posts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    scope: Mapped[PostScope] = mapped_column(String(10))
+    crew_id: Mapped[str | None] = mapped_column(ForeignKey("crews.id"), default=None)  # crew scope
+    town_code: Mapped[str | None] = mapped_column(String(20), default=None)            # town scope (행정동)
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    anonymous: Mapped[bool] = mapped_column(default=False)
+    category: Mapped[PostCategory] = mapped_column(String(10), default=PostCategory.QUESTION)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(String(4000))
+    deleted_at: Mapped[datetime | None] = mapped_column(default=None)  # 삭제는 무효화로 (감사 추적)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    post_id: Mapped[str] = mapped_column(ForeignKey("posts.id"))
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    anonymous: Mapped[bool] = mapped_column(default=False)
+    body: Mapped[str] = mapped_column(String(1000))
+    deleted_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class PostLike(Base):
+    __tablename__ = "post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    post_id: Mapped[str] = mapped_column(ForeignKey("posts.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
