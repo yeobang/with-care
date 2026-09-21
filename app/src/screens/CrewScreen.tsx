@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Text, TouchableOpacity, View } from "react-native";
-import { api, CrewView, Post, timeAgo } from "../api";
+import { api, CrewView, JoinRequest, Post, timeAgo } from "../api";
 import { Avatar, Btn, Columns, NavBar, Note, Page, PageHeader, Pill, Steps } from "../components";
+import { InviteCard, JoinRequests } from "../InviteCard";
 import { SkeletonCard } from "../pickers";
-import { notify, notifyError } from "../notify";
+import { notifyError } from "../notify";
 import { t, ui } from "../ui";
 
 interface Charter {
@@ -21,13 +22,14 @@ interface IncidentBadge {
   fine_krw_total: number;
 }
 
-const WEB_ORIGIN = "https://with-care-web.fly.dev";
+/** 모임이 실제로 굴러가려면 3집부터 (§29). */
+const MIN_HOUSEHOLDS = 3;
 
 export default function CrewScreen({ route, navigation }: any) {
   const { crewId } = route.params;
   const [crew, setCrew] = useState<CrewView | null>(null);
   const [charter, setCharter] = useState<Charter | null>(null);
-  const [invite, setInvite] = useState<string | null>(null);
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [badges, setBadges] = useState<IncidentBadge[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
 
@@ -36,6 +38,7 @@ export default function CrewScreen({ route, navigation }: any) {
     api.get<Charter>(`/crews/${crewId}/charter`).then(setCharter).catch(() => {});
     api.get<IncidentBadge[]>(`/crews/${crewId}/incidents`).then(setBadges).catch(() => {});
     api.get<Post[]>(`/posts?scope=crew&crew_id=${crewId}&limit=5`).then(setPosts).catch(() => {});
+    api.get<JoinRequest[]>(`/crews/${crewId}/join-requests`).then(setRequests).catch(() => {});
   }, [crewId]);
   useFocusEffect(load);
 
@@ -57,8 +60,17 @@ export default function CrewScreen({ route, navigation }: any) {
     );
   const active = crew.status === "active";
 
+  // §29: 사람이 모이기 전에는 '규칙'이 아니라 '초대'가 이 화면의 주인공이다
+  const needsPeople = crew.member_count < MIN_HOUSEHOLDS;
+
   const mainCol = (
     <View>
+      <JoinRequests crewId={crewId} requests={requests} onDecided={load} />
+
+      {needsPeople && (
+        <InviteCard crewId={crewId} crewName={crew.name} memberCount={crew.member_count} />
+      )}
+
       {active ? (
         <>
           <Text style={ui.sectionTitle}>무엇을 할까요?</Text>
@@ -97,23 +109,11 @@ export default function CrewScreen({ route, navigation }: any) {
         </>
       )}
 
-      <Text style={ui.sectionTitle}>이웃 초대하기</Text>
-      <Btn
-        label="초대 링크 만들기"
-        tone={active ? "soft" : "ghost"}
-        onPress={act(async () => {
-          const r = await api.post<{ token: string }>(`/crews/${crewId}/invites`);
-          setInvite(r.token);
-          notify("초대 링크를 만들었어요", "아래 주소를 카톡방에 붙여넣으세요", "success");
-        })}
-      />
-      {invite && (
-        <View style={ui.card}>
-          <Text selectable style={{ fontSize: 13, fontWeight: "600", color: t.mintDeep }}>
-            {`${WEB_ORIGIN}/invite/${invite}`}
-          </Text>
-          <Text style={ui.hint}>카톡방에 붙여넣으면 초대장이 열려요 · 7일 유효, 1회용</Text>
-        </View>
+      {!needsPeople && (
+        <>
+          <Text style={ui.sectionTitle}>이웃 초대하기</Text>
+          <InviteCard crewId={crewId} crewName={crew.name} memberCount={crew.member_count} compact />
+        </>
       )}
     </View>
   );
@@ -187,8 +187,17 @@ export default function CrewScreen({ route, navigation }: any) {
     <Page wide nav={<NavBar navigation={navigation} crewId={crewId} crewName={crew.name} active="crew" />}>
       <PageHeader
         title={crew.name}
-        sub={`${active ? "쓰는 중" : "준비 중"} · ${crew.member_count}집`}
-        right={<Pill label={active ? "쓰는 중" : "준비 중"} tone={active ? "mint" : "lemon"} />}
+        sub={
+          needsPeople
+            ? `${crew.member_count}집 · ${MIN_HOUSEHOLDS - crew.member_count}집 더 모이면 시작할 수 있어요`
+            : `${active ? "쓰는 중" : "준비 중"} · ${crew.member_count}집`
+        }
+        right={
+          <Pill
+            label={needsPeople ? "사람 모으는 중" : active ? "쓰는 중" : "준비 중"}
+            tone={needsPeople ? "coral" : active ? "mint" : "lemon"}
+          />
+        }
       />
       <Columns left={mainCol} right={sideCol} />
     </Page>

@@ -92,6 +92,21 @@ export interface Child {
   birth_year_month: string;
 }
 
+/** §29: 초대 링크로 들어온 사람. 부모 멤버가 승인해야 멤버가 된다. */
+export interface JoinRequest {
+  id: string;
+  user_id: string;
+  name: string;
+  role: string;
+  created_at: string;
+}
+
+export interface InviteCreated {
+  token: string;
+  role: string;
+  max_uses: number;
+}
+
 export interface Slot {
   id: string;
   user_id: string;

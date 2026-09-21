@@ -7,6 +7,7 @@ I3·I4·I5는 해당 구현 단계(P2·P4)에서 전환 — 그 전까지 xfail�
 import pytest
 
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain.errors import (
     CharterIncomplete,
     ConsentMissing,
@@ -33,21 +34,63 @@ def test_i1_unverified_user_cannot_join(db, verified_user, active_crew):
     db.add(stranger)
     db.flush()
     with pytest.raises(HandoffGateViolation):
-        svc.join_crew(db, stranger, invite.token)
+        svc.request_join(db, stranger, invite.token)
 
 
 def test_i1_no_join_without_invite(db, verified_user):
     outsider = verified_user("인증됐지만초대없음")
     with pytest.raises(HandoffGateViolation):
-        svc.join_crew(db, outsider, "존재하지-않는-토큰")
+        svc.request_join(db, outsider, "존재하지-않는-토큰")
 
 
-def test_i1_invite_is_single_use(db, verified_user, active_crew):
+def test_i1_invite_seats_are_capped(db, verified_user, active_crew):
+    """§29: 1회용을 버린 대신 정원을 둔다. 링크가 무한 관문이 되지 않는다."""
     crew, owner = active_crew
     invite = svc.create_invite(db, crew.id, owner)
-    svc.join_crew(db, verified_user("첫사용자"), invite.token)
+    invite.max_uses = 2
+    db.flush()
+    join_via(db, verified_user("첫집"), invite.token, owner)
+    join_via(db, verified_user("둘째집"), invite.token, owner)
     with pytest.raises(HandoffGateViolation):
-        svc.join_crew(db, verified_user("재사용시도"), invite.token)
+        svc.request_join(db, verified_user("정원초과"), invite.token)
+
+
+def test_i1_link_alone_does_not_make_a_member(db, verified_user, active_crew):
+    """§29의 핵심: 링크 소지만으로는 멤버가 아니다. 승인이 있어야 한다."""
+    from app.domain.models import CrewMember, JoinRequestStatus
+    from sqlalchemy import select
+
+    crew, owner = active_crew
+    invite = svc.create_invite(db, crew.id, owner)
+    outsider = verified_user("링크만받은사람")
+    req = svc.request_join(db, outsider, invite.token)
+    assert req.status == JoinRequestStatus.PENDING
+    assert db.scalar(
+        select(CrewMember).where(CrewMember.crew_id == crew.id, CrewMember.user_id == outsider.id)
+    ) is None
+    # 승인 전에는 크루 데이터도 못 본다 (I6)
+    with pytest.raises(CrewIsolationViolation):
+        svc.get_crew_view(db, crew.id, outsider)
+
+
+def test_i1_only_parent_member_can_approve(db, verified_user, active_crew):
+    """승인 관문 자체가 크루 밖으로 열려 있으면 다회용 링크는 무의미하다 (I6·§25-2)."""
+    crew, owner = active_crew
+    invite = svc.create_invite(db, crew.id, owner)
+    applicant = svc.request_join(db, verified_user("신청자"), invite.token)
+    outsider = verified_user("남")
+    with pytest.raises(CrewIsolationViolation):
+        svc.decide_join(db, applicant.id, outsider, approve=True)
+
+
+def test_i1_rejected_applicant_cannot_retry(db, verified_user, active_crew):
+    crew, owner = active_crew
+    invite = svc.create_invite(db, crew.id, owner)
+    applicant = verified_user("거절될사람")
+    req = svc.request_join(db, applicant, invite.token)
+    svc.decide_join(db, req.id, owner, approve=False)
+    with pytest.raises(HandoffGateViolation):
+        svc.request_join(db, applicant, invite.token)
 
 
 # --- I2: 포괄 합의 없이는 크루 활동 시작 불가 ---
@@ -65,7 +108,7 @@ def test_i2_activation_blocked_until_all_members_consent(db, verified_user):
     svc.confirm_charter(db, crew.id, owner)
     svc.submit_consent(db, crew.id, owner, liability_ack=True, photo_consent=True, guardian_consent=True)
     invite = svc.create_invite(db, crew.id, owner)
-    svc.join_crew(db, verified_user("합의안한멤버"), invite.token)
+    join_via(db, verified_user("합의안한멤버"), invite.token, owner)
     with pytest.raises(ConsentMissing):
         svc.activate_crew(db, crew.id, owner)
 

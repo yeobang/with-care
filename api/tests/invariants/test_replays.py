@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.domain import board_service as board
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain.models import Assignment, CareSession, Child, Consent, SlotKind
 
 
@@ -20,7 +21,7 @@ def board_crew(db, verified_user):
     for i in range(2):
         m = verified_user(f"부모{i}")
         inv = svc.create_invite(db, crew.id, owner)
-        svc.join_crew(db, m, inv.token)
+        join_via(db, m, inv.token, owner)
         moms.append(m)
     for u in [owner, *moms]:
         svc.submit_consent(db, crew.id, u, liability_ack=True, photo_consent=True, guardian_consent=True)
@@ -84,14 +85,13 @@ def test_double_join_is_domain_error(db, verified_user):
     owner = verified_user("오너")
     crew = svc.create_crew(db, owner, "크루")
     mom = verified_user("부모")
-    inv1 = svc.join_crew(db, mom, svc.create_invite(db, crew.id, owner).token)
+    inv1 = join_via(db, mom, svc.create_invite(db, crew.id, owner).token, owner)
     assert inv1 is not None
     inv2 = svc.create_invite(db, crew.id, owner)
     with pytest.raises(ValueError):
-        svc.join_crew(db, mom, inv2.token)
-    # 실패한 시도가 초대장을 소모하지 않는다
-    from app.domain.models import Invite
-    assert db.get(Invite, inv2.token).used_by is None
+        join_via(db, mom, inv2.token, owner)
+    # 실패한 시도가 초대장의 자리를 소모하지 않는다 (§29)
+    assert svc.invite_use_count(db, inv2.token) == 0
 
 
 def test_resubmit_consent_updates_not_crashes(db, verified_user):

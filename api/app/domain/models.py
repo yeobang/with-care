@@ -82,13 +82,46 @@ class CrewMember(Base):
 
 
 class Invite(Base):
+    """§29: 단톡방에 한 번 붙이면 여러 집이 들어올 수 있어야 한다 → 횟수 제한 다회용.
+
+    1회용을 버린 대신 I1은 두 겹으로 유지된다: 합류 시 본인인증 검증 + 초대자 승인.
+    링크 소지만으로는 멤버가 되지 않는다 (JoinRequest 경유).
+    """
+
     __tablename__ = "invites"
 
     token: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
     inviter_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     role: Mapped[MemberRole] = mapped_column(String(10), default=MemberRole.PARENT)  # §25-1
-    used_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), default=None)
+    max_uses: Mapped[int] = mapped_column(default=5)  # 크루 상한(3~6가구)에 맞춘 값
+    revoked_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
+class JoinRequestStatus(enum.StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class JoinRequest(Base):
+    """§29: 링크로 들어온 사람은 '대기'에 쌓이고, 부모 멤버가 승인해야 멤버가 된다.
+
+    다회용 링크가 방 밖으로 전달됐을 때 낯선 사람이 그대로 들어오는 것을 막는 관문이다.
+    """
+
+    __tablename__ = "join_requests"
+    __table_args__ = (UniqueConstraint("crew_id", "user_id", name="uq_join_request_crew_user"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    invite_token: Mapped[str] = mapped_column(ForeignKey("invites.token"))
+    role: Mapped[MemberRole] = mapped_column(String(10), default=MemberRole.PARENT)
+    status: Mapped[JoinRequestStatus] = mapped_column(String(10), default=JoinRequestStatus.PENDING)
+    decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), default=None)
+    decided_at: Mapped[datetime | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 

@@ -43,6 +43,19 @@ def _h(user_id: str) -> dict:
     return {"X-User-Id": user_id}
 
 
+def _join(client, crew_id, owner, uid, role=None):
+    """§29: 초대 링크 → 대기 → 부모 멤버 승인. 테스트에서 한 줄로 묶는다."""
+    body = {"role": role} if role else None
+    token = client.post(f"/crews/{crew_id}/invites", json=body, headers=_h(owner)).json()["token"]
+    r = client.post(f"/invites/{token}/join", headers=_h(uid))
+    if r.status_code >= 400:
+        return r
+    req_id = r.json()["request_id"]
+    return client.post(
+        f"/crews/{crew_id}/join-requests/{req_id}", json={"approve": True}, headers=_h(owner)
+    )
+
+
 def _signup(client: TestClient, name: str) -> str:
     """가입 + 본인인증(스텁) — P6부터 가입만으로는 verified가 아니다."""
     uid = client.post("/users", json={"name": name}).json()["id"]
@@ -61,8 +74,7 @@ def test_full_week_flow(client):
     crew = client.post("/crews", json={"name": "우리동네크루"}, headers=_h(owner)).json()
     crew_id = crew["id"]
     for uid in (mom_b, mom_c):
-        token = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
-        res = client.post(f"/invites/{token}/join", headers=_h(uid))
+        res = _join(client, crew_id, owner, uid)
         assert res.status_code == 200
 
     # 활성화 시도 → 규약 미확정으로 차단 (I7이 HTTP까지 도달하는지)
@@ -137,8 +149,7 @@ def test_session_photos_flow(client, monkeypatch):
     users = [_signup(client, f"u{i}") for i in range(2)]
     owner, mom = users
     crew_id = client.post("/crews", json={"name": "포토크루"}, headers=_h(owner)).json()["id"]
-    token = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
-    client.post(f"/invites/{token}/join", headers=_h(mom))
+    _join(client, crew_id, owner, mom)
     for uid in users:
         client.post(
             f"/crews/{crew_id}/consent",
@@ -185,8 +196,7 @@ def test_ledger_and_settlement_flow(client):
     owner, mom_b, mom_c = users
     crew_id = client.post("/crews", json={"name": "장부크루"}, headers=_h(owner)).json()["id"]
     for uid in (mom_b, mom_c):
-        token = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
-        client.post(f"/invites/{token}/join", headers=_h(uid))
+        _join(client, crew_id, owner, uid)
     for uid in users:
         client.post(
             f"/crews/{crew_id}/consent",

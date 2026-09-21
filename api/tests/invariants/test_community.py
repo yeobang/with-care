@@ -7,6 +7,7 @@ import pytest
 
 from app.domain import community_service as cs
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain import errors
 from app.domain.models import PostCategory, PostScope, User
 
@@ -29,7 +30,7 @@ def crew_with_members(db, verified_user):
     owner = verified_user("오너")
     crew = svc.create_crew(db, owner, "이야기크루")
     member = verified_user("멤버")
-    svc.join_crew(db, member, svc.create_invite(db, crew.id, owner).token)
+    join_via(db, member, svc.create_invite(db, crew.id, owner).token, owner)
     return crew, owner, member
 
 

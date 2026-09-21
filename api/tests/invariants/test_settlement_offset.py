@@ -7,6 +7,7 @@ import pytest
 
 from app.domain import board_service as board
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain import ledger_service as ledger
 from app.domain.models import Child, SlotKind
 
@@ -20,7 +21,7 @@ def credit_crew(db, verified_user):
     for i in range(2):
         m = verified_user(f"부모{i}")
         inv = svc.create_invite(db, crew.id, owner)
-        svc.join_crew(db, m, inv.token)
+        join_via(db, m, inv.token, owner)
         moms.append(m)
     for u in [owner, *moms]:
         svc.submit_consent(db, crew.id, u, liability_ack=True, photo_consent=True, guardian_consent=True)

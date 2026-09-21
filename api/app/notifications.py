@@ -300,3 +300,38 @@ def remind_weekly_board(db: DbSession) -> None:
             f"{crew.name} 주간 보드",
             "다음 주 가능한 시간과 돌봄이 필요한 시간을 입력해주세요",
         )
+
+
+def notify_join_request(db: DbSession, req, applicant) -> None:
+    """§29: 합류 요청이 대기에 쌓였다 — 승인할 수 있는 부모 멤버에게."""
+    from app.domain.models import MemberRole
+
+    parents = db.scalars(
+        select(CrewMember).where(
+            CrewMember.crew_id == req.crew_id, CrewMember.role == MemberRole.PARENT
+        )
+    ).all()
+    _send_to(
+        db,
+        {m.user_id for m in parents},
+        "합류 신청이 왔어요",
+        f"{applicant.name}님이 초대 링크로 들어왔어요 — 아는 분이 맞는지 확인하고 승인해주세요",
+        crew_id=req.crew_id,
+    )
+
+
+def notify_join_decided(db: DbSession, req) -> None:
+    """§29: 승인/거절 결과를 신청자 본인에게."""
+    from app.domain.models import Crew, JoinRequestStatus
+
+    crew = db.get(Crew, req.crew_id)
+    name = crew.name if crew else "모임"
+    approved = req.status == JoinRequestStatus.APPROVED
+    _send_to(
+        db,
+        {req.user_id},
+        "합류가 승인됐어요" if approved else "합류가 거절됐어요",
+        f"{name}에 들어왔어요 — 이번 주 되는 시간을 알려주세요" if approved
+        else f"{name} 합류가 거절됐어요. 초대한 분께 문의해주세요",
+        crew_id=req.crew_id if approved else None,
+    )

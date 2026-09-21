@@ -35,7 +35,7 @@ def ctx():
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def sent(monkeypatch):
     box: list[dict] = []
 
@@ -51,12 +51,25 @@ def _h(uid: str) -> dict:
     return {"X-User-Id": uid}
 
 
+def _join(client, crew_id, owner, uid, role=None):
+    """§29: 초대 링크 → 대기 → 부모 멤버 승인. 테스트에서 한 줄로 묶는다."""
+    body = {"role": role} if role else None
+    token = client.post(f"/crews/{crew_id}/invites", json=body, headers=_h(owner)).json()["token"]
+    r = client.post(f"/invites/{token}/join", headers=_h(uid))
+    if r.status_code >= 400:
+        return r
+    req_id = r.json()["request_id"]
+    return client.post(
+        f"/crews/{crew_id}/join-requests/{req_id}", json={"approve": True}, headers=_h(owner)
+    )
+
+
 def _tok(uid: str) -> str:
     return f"ExponentPushToken[{uid}]"
 
 
 @pytest.fixture
-def crew(ctx):
+def crew(ctx, sent):
     """활성 크루(오너+부모2, credit 단가 10000) + 아이 + 전원 푸시 토큰 등록."""
     client, _ = ctx
     users = []
@@ -68,8 +81,7 @@ def crew(ctx):
     owner, mom_b, mom_c = users
     crew_id = client.post("/crews", json={"name": "푸시크루"}, headers=_h(owner)).json()["id"]
     for uid in (mom_b, mom_c):
-        t = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
-        client.post(f"/invites/{t}/join", headers=_h(uid))
+        _join(client, crew_id, owner, uid)
     for uid in users:
         client.post(
             f"/crews/{crew_id}/consent",
@@ -89,6 +101,7 @@ def crew(ctx):
             json={"name": "아이", "birth_year_month": "2022-05", "emergency_contact": "010"},
             headers=_h(uid),
         ).json()["id"]
+    sent.clear()  # 크루 구성 중 발생한 알림(합류 신청·승인)은 테스트 대상이 아니다
     return {"client": client, "crew_id": crew_id, "owner": owner, "moms": [mom_b, mom_c], "kids": kids}
 
 

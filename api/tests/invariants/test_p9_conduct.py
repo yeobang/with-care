@@ -4,6 +4,7 @@ import pytest
 
 from app.domain import board_service as board
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain import errors
 from app.domain import incident_service as inc
 from app.domain import ledger_service as ledger
@@ -18,7 +19,7 @@ def crew3(db, verified_user):
         moms, kids = [], {}
         for i in range(2):
             m = verified_user(f"부모{i}")
-            svc.join_crew(db, m, svc.create_invite(db, crew.id, owner).token)
+            join_via(db, m, svc.create_invite(db, crew.id, owner).token, owner)
             moms.append(m)
         for u in [owner, *moms]:
             svc.submit_consent(db, crew.id, u, liability_ack=True, photo_consent=True, guardian_consent=True)

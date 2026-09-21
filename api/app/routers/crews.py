@@ -3,9 +3,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import notifications
 from app.deps import get_current_user, get_db
 from app.domain import crew_service as svc
-from app.domain.models import Charter, CrewMember, MemberRole, SettlementMode, User
+from app.domain.models import Charter, Crew, CrewMember, MemberRole, SettlementMode, User
 
 router = APIRouter(tags=["crews"])
 
@@ -45,7 +46,7 @@ def create_invite(
     db: Session = Depends(get_db),
 ):
     invite = svc.create_invite(db, crew_id, user, role=body.role if body else MemberRole.PARENT)
-    return {"token": invite.token, "role": str(invite.role)}
+    return {"token": invite.token, "role": str(invite.role), "max_uses": invite.max_uses}
 
 
 @router.get("/invites/{token}")
@@ -67,19 +68,47 @@ def invite_preview(token: str, db: Session = Depends(get_db)):
     member_count = len(
         db.scalars(select(CrewMember).where(CrewMember.crew_id == crew.id)).all()
     )
+    used = svc.invite_use_count(db, token)
     return {
         "crew_name": crew.name,
         "inviter_name": inviter.name,
         "member_count": member_count,
-        "used": invite.used_by is not None,
+        # §29: 다회용 — "이미 사용됨"은 정원이 찼을 때만
+        "used": invite.revoked_at is not None or used >= invite.max_uses,
+        "seats_left": max(invite.max_uses - used, 0),
         "expired": svc.invite_expired(invite),
     }
 
 
 @router.post("/invites/{token}/join")
 def join(token: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    member = svc.join_crew(db, user, token)
-    return svc.get_crew_view(db, member.crew_id, user)
+    """§29: 즉시 멤버가 되지 않는다. 대기에 쌓이고 부모 멤버가 승인해야 한다."""
+    req = svc.request_join(db, user, token)
+    notifications.notify_join_request(db, req, user)
+    crew = db.get(Crew, req.crew_id)
+    return {"status": "pending", "request_id": req.id, "crew_id": req.crew_id, "crew_name": crew.name}
+
+
+@router.get("/crews/{crew_id}/join-requests")
+def join_requests(crew_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return svc.pending_joins(db, crew_id, user)
+
+
+class DecisionIn(BaseModel):
+    approve: bool
+
+
+@router.post("/crews/{crew_id}/join-requests/{request_id}")
+def decide_join_request(
+    crew_id: str,
+    request_id: str,
+    body: DecisionIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    req = svc.decide_join(db, request_id, user, approve=body.approve)
+    notifications.notify_join_decided(db, req)
+    return {"id": req.id, "status": str(req.status)}
 
 
 class ConsentIn(BaseModel):

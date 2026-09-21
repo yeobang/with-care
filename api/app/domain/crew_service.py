@@ -17,6 +17,8 @@ from app.domain.models import (
     CrewMember,
     CrewStatus,
     Invite,
+    JoinRequest,
+    JoinRequestStatus,
     MemberRole,
     User,
     _now,
@@ -48,14 +50,27 @@ def create_invite(
     return invite
 
 
-def join_crew(db: DbSession, user: User, invite_token: str) -> CrewMember:
-    """I1 관문의 P1 절반: 본인인증 + 유효한 초대 없이는 멤버가 될 수 없다.
+def invite_use_count(db: DbSession, token: str) -> int:
+    """소진으로 치는 것: 승인됐거나 아직 대기 중인 요청. 거절은 자리를 돌려준다."""
+    return len(
+        db.scalars(
+            select(JoinRequest).where(
+                JoinRequest.invite_token == token,
+                JoinRequest.status != JoinRequestStatus.REJECTED,
+            )
+        ).all()
+    )
 
-    (인계 자체는 세션 계층(P2)에서 멤버십을 다시 검증한다.)
+
+def request_join(db: DbSession, user: User, invite_token: str) -> JoinRequest:
+    """§29: 링크는 '대기 줄에 설 자격'까지만 준다. 멤버가 되는 건 승인 이후.
+
+    I1 관문의 P1 절반은 그대로다 — 본인인증 + 유효한 초대. 다회용으로 바뀐 만큼
+    링크가 단톡방 밖으로 전달됐을 때를 대비해 승인 관문을 한 겹 더 둔다.
     """
     _require_verified(user)
     invite = db.get(Invite, invite_token)
-    if invite is None or invite.used_by is not None or invite_expired(invite):
+    if invite is None or invite.revoked_at is not None or invite_expired(invite):
         raise errors.HandoffGateViolation("유효한 초대 없이는 크루에 합류할 수 없다 (I1)")
     already = db.scalar(
         select(CrewMember).where(
@@ -63,12 +78,72 @@ def join_crew(db: DbSession, user: User, invite_token: str) -> CrewMember:
         )
     )
     if already is not None:
-        raise ValueError("이미 이 크루의 멤버다")  # 초대장은 소모하지 않는다
-    invite.used_by = user.id
-    member = CrewMember(crew_id=invite.crew_id, user_id=user.id, role=invite.role)
-    db.add(member)
+        raise ValueError("이미 이 크루의 멤버다")
+    existing = db.scalar(
+        select(JoinRequest).where(
+            JoinRequest.crew_id == invite.crew_id, JoinRequest.user_id == user.id
+        )
+    )
+    if existing is not None and existing.status == JoinRequestStatus.PENDING:
+        return existing  # 링크를 두 번 눌러도 대기 줄은 하나 (멱등)
+    if existing is not None and existing.status == JoinRequestStatus.REJECTED:
+        raise errors.HandoffGateViolation("거절된 요청이다. 초대한 분께 문의해주세요")
+    if invite_use_count(db, invite_token) >= invite.max_uses:
+        raise errors.HandoffGateViolation("이 초대 링크는 정원이 찼다. 새 링크를 요청해주세요")
+    req = JoinRequest(
+        crew_id=invite.crew_id, user_id=user.id, invite_token=invite_token, role=invite.role
+    )
+    db.add(req)
     db.flush()
-    return member
+    return req
+
+
+def decide_join(
+    db: DbSession, request_id: str, approver: User, *, approve: bool
+) -> JoinRequest:
+    """승인/거절. 부모 멤버 전용 (§25-2).
+
+    가정: 초대한 본인뿐 아니라 **부모 멤버 누구나** 승인할 수 있다 — 초대자가 자리를
+    비웠다고 크루가 잠기지 않게 하기 위함. 3~6가구 신뢰 단위이므로 허용 범위로 본다.
+    """
+    from app.domain.models import _now
+
+    req = db.get(JoinRequest, request_id)
+    if req is None:
+        raise ValueError("존재하지 않는 합류 요청")
+    _require_parent(db, req.crew_id, approver.id)
+    if req.status != JoinRequestStatus.PENDING:
+        raise ValueError("이미 처리된 요청이다")
+    req.status = JoinRequestStatus.APPROVED if approve else JoinRequestStatus.REJECTED
+    req.decided_by = approver.id
+    req.decided_at = _now()
+    if approve:
+        db.add(CrewMember(crew_id=req.crew_id, user_id=req.user_id, role=req.role))
+    db.flush()
+    return req
+
+
+def pending_joins(db: DbSession, crew_id: str, requester: User) -> list[dict]:
+    """대기 중인 합류 요청 — 멤버만 볼 수 있다 (I6)."""
+    _require_member(db, crew_id, requester.id)
+    reqs = db.scalars(
+        select(JoinRequest).where(
+            JoinRequest.crew_id == crew_id, JoinRequest.status == JoinRequestStatus.PENDING
+        )
+    ).all()
+    out = []
+    for r in reqs:
+        u = db.get(User, r.user_id)
+        out.append(
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "name": u.name if u else "?",
+                "role": str(r.role),
+                "created_at": r.created_at.isoformat(),
+            }
+        )
+    return out
 
 
 def submit_consent(

@@ -8,6 +8,7 @@ from datetime import timedelta
 import pytest
 
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain import errors
 
 
@@ -19,7 +20,7 @@ def test_expired_invite_rejected(db, verified_user):
     db.flush()
     joiner = verified_user("늦은사람")
     with pytest.raises(errors.HandoffGateViolation):
-        svc.join_crew(db, joiner, invite.token)
+        svc.request_join(db, joiner, invite.token)
 
 
 def test_fresh_invite_ok(db, verified_user):
@@ -27,4 +28,4 @@ def test_fresh_invite_ok(db, verified_user):
     crew = svc.create_crew(db, owner, "크루")
     invite = svc.create_invite(db, crew.id, owner)
     joiner = verified_user("바로온사람")
-    assert svc.join_crew(db, joiner, invite.token) is not None
+    assert join_via(db, joiner, invite.token, owner) is not None

@@ -4,6 +4,7 @@ import pytest
 
 from app.domain import board_service as board
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain import errors
 from app.domain.models import Child, SlotKind
 
@@ -13,7 +14,7 @@ def family_crew(db, verified_user):
     owner = verified_user("오너")
     crew = svc.create_crew(db, owner, "크루")
     mom = verified_user("부모")
-    svc.join_crew(db, mom, svc.create_invite(db, crew.id, owner).token)
+    join_via(db, mom, svc.create_invite(db, crew.id, owner).token, owner)
     for u in (owner, mom):
         svc.submit_consent(db, crew.id, u, liability_ack=True, photo_consent=True, guardian_consent=True)
     svc.confirm_charter(db, crew.id, owner)

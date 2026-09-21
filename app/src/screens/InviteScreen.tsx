@@ -23,6 +23,7 @@ export default function InviteScreen({ route, navigation }: any) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
+  const [requested, setRequested] = useState(false);
 
   useEffect(() => {
     api.get<Preview>(`/invites/${token}`).then(setPreview).catch((e) => setError(e.message));
@@ -51,11 +52,9 @@ export default function InviteScreen({ route, navigation }: any) {
         await AsyncStorage.setItem("userId", user.id);
         await api.post("/identity/verify"); // dev: 스텁 본인인증
       }
-      const crew = await api.post<{ id: string; name: string }>(`/invites/${token}/join`);
-      navigation.reset({
-        index: 1,
-        routes: [{ name: "Home" }, { name: "Crew", params: { crewId: crew.id, name: crew.name } }],
-      });
+      // §29: 바로 멤버가 되지 않는다 — 초대한 분이 확인하고 받아줘야 한다
+      await api.post<{ status: string; crew_name: string }>(`/invites/${token}/join`);
+      setRequested(true);
     } catch (e: any) {
       notifyError(e);
     }
@@ -107,7 +106,7 @@ export default function InviteScreen({ route, navigation }: any) {
                 {[
                   { icon: "calendar" as const, text: "이번 주 되는 시간만 누르면 끝" },
                   { icon: "coins" as const, text: "누가 더 봐줬는지 앱이 기록해요" },
-                  { icon: "shield" as const, text: "초대받은 사람만 들어올 수 있어요" },
+                  { icon: "shield" as const, text: "초대한 분이 확인해야 들어올 수 있어요" },
                   { icon: "camera" as const, text: "돌봄 사진은 이 모임 안에서만 보여요" },
                 ].map((r) => (
                   <View key={r.text} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -119,10 +118,19 @@ export default function InviteScreen({ route, navigation }: any) {
                 ))}
               </View>
 
-              {preview.used || preview.expired ? (
+              {requested ? (
+                <View style={{ backgroundColor: t.mintTint, borderRadius: 14, padding: 16, gap: 8 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }}>신청했어요</Text>
+                  <Text style={{ fontSize: 13, color: t.sub, lineHeight: 20 }}>
+                    {preview.inviter_name}님이 확인하고 받아주시면 알림으로 알려드릴게요.
+                    그때까지는 모임의 어떤 정보도 보이지 않아요.
+                  </Text>
+                  <Btn label="내 화면으로 가기" tone="soft" onPress={() => navigation.navigate("Home")} style={{ marginTop: 0 }} />
+                </View>
+              ) : preview.used || preview.expired ? (
                 <View style={{ backgroundColor: t.coralTint, borderRadius: 14, padding: 14 }}>
                   <Text style={{ fontSize: 13, color: t.coralDeep, lineHeight: 20 }}>
-                    {preview.used ? "이미 사용된 초대예요." : "기한이 지난 초대예요."} 초대한 분께 새 링크를 요청해주세요.
+                    {preview.used ? "이 초대 링크는 정원이 찼어요." : "기한이 지난 초대예요."} 초대한 분께 새 링크를 요청해주세요.
                   </Text>
                 </View>
               ) : (
@@ -130,15 +138,15 @@ export default function InviteScreen({ route, navigation }: any) {
                   {!loggedIn && !supabase && (
                     <TextInput
                       style={ui.input}
-                      placeholder="이름을 입력하면 바로 합류돼요"
+                      placeholder="이름을 입력하고 신청하세요"
                       placeholderTextColor={t.sub}
                       value={name}
                       onChangeText={setName}
                     />
                   )}
-                  <Btn label="모임 합류하기" onPress={join} style={{ marginTop: 0 }} />
+                  <Btn label="합류 신청하기" onPress={join} style={{ marginTop: 0 }} />
                   <Text style={{ fontSize: 11, color: t.sub, textAlign: "center" }}>
-                    합류 전에는 모임의 다른 정보가 보이지 않아요
+                    신청하면 {preview.inviter_name}님이 확인 후 받아줘요 · 그 전까지 모임 정보는 보이지 않아요
                   </Text>
                 </>
               )}

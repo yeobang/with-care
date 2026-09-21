@@ -36,7 +36,7 @@ def ctx():
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def sent(monkeypatch):
     box: list[dict] = []
 
@@ -50,6 +50,19 @@ def sent(monkeypatch):
 
 def _h(uid: str) -> dict:
     return {"X-User-Id": uid}
+
+
+def _join(client, crew_id, owner, uid, role=None):
+    """§29: 초대 링크 → 대기 → 부모 멤버 승인. 테스트에서 한 줄로 묶는다."""
+    body = {"role": role} if role else None
+    token = client.post(f"/crews/{crew_id}/invites", json=body, headers=_h(owner)).json()["token"]
+    r = client.post(f"/invites/{token}/join", headers=_h(uid))
+    if r.status_code >= 400:
+        return r
+    req_id = r.json()["request_id"]
+    return client.post(
+        f"/crews/{crew_id}/join-requests/{req_id}", json={"approve": True}, headers=_h(owner)
+    )
 
 
 def _tok(uid: str) -> str:
@@ -85,11 +98,9 @@ def setup(ctx):
     for uid in (owner, mom, sitter):
         client.post("/push/tokens", json={"token": _tok(uid)}, headers=_h(uid))
     crew_id = client.post("/crews", json={"name": "시터크루"}, headers=_h(owner)).json()["id"]
-    t = client.post(f"/crews/{crew_id}/invites", headers=_h(owner)).json()["token"]
-    client.post(f"/invites/{t}/join", headers=_h(mom))
+    _join(client, crew_id, owner, mom)
     # 시터 전용 초대 (§25-1)
-    t2 = client.post(f"/crews/{crew_id}/invites", json={"role": "sitter"}, headers=_h(owner)).json()["token"]
-    client.post(f"/invites/{t2}/join", headers=_h(sitter))
+    _join(client, crew_id, owner, sitter, role="sitter")
     for uid in (owner, mom, sitter):
         _consent(client, crew_id, uid)
     client.post(f"/crews/{crew_id}/charter/confirm", json={}, headers=_h(owner))
@@ -165,8 +176,7 @@ def test_quote_requires_profile(setup):
     s, client = setup, setup["client"]
     # 프로필 없는 두 번째 시터
     sitter2 = _signup(client, "시터2")
-    t = client.post(f"/crews/{s['crew_id']}/invites", json={"role": "sitter"}, headers=_h(s["owner"])).json()["token"]
-    client.post(f"/invites/{t}/join", headers=_h(sitter2))
+    _join(client, s["crew_id"], s["owner"], sitter2, role="sitter")
     _consent(client, s["crew_id"], sitter2)
     req = _make_request(s)
     assert client.post(f"/sitter-requests/{req['id']}/quotes", headers=_h(sitter2)).status_code == 422

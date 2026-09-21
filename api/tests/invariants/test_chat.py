@@ -4,6 +4,7 @@ import pytest
 
 from app.domain import chat_service as chat
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain import errors
 
 
@@ -13,7 +14,7 @@ def two_crews(db, verified_user):
     a_owner = verified_user("A오너")
     crew_a = svc.create_crew(db, a_owner, "A크루")
     a_member = verified_user("A멤버")
-    svc.join_crew(db, a_member, svc.create_invite(db, crew_a.id, a_owner).token)
+    join_via(db, a_member, svc.create_invite(db, crew_a.id, a_owner).token, a_owner)
 
     b_owner = verified_user("B오너")
     crew_b = svc.create_crew(db, b_owner, "B크루")
@@ -65,7 +66,7 @@ def test_dm_is_private_to_the_two(db, verified_user):
     m1 = verified_user("멤버1")
     m2 = verified_user("멤버2")
     for m in (m1, m2):
-        svc.join_crew(db, m, svc.create_invite(db, crew.id, owner).token)
+        join_via(db, m, svc.create_invite(db, crew.id, owner).token, owner)
     room = chat.dm_room(db, owner, m1.id)
     chat.send(db, room.id, owner, "둘만의 대화")
     with pytest.raises(errors.CrewIsolationViolation):
@@ -179,7 +180,7 @@ def test_dm_notification_stays_between_the_two(db, verified_user, monkeypatch):
     crew = svc.create_crew(db, owner, "크루")
     m1, m2 = verified_user("멤버1"), verified_user("멤버2")
     for m in (m1, m2):
-        svc.join_crew(db, m, svc.create_invite(db, crew.id, owner).token)
+        join_via(db, m, svc.create_invite(db, crew.id, owner).token, owner)
     room = chat.dm_room(db, owner, m1.id)
     msg = chat.send(db, room.id, owner, "둘만의 메시지")
     notifications.notify_chat(db, msg, owner)

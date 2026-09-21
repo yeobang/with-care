@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.domain import board_service as board
 from app.domain import crew_service as svc
+from .helpers import join_via
 from app.domain.errors import HumanChoiceViolation, UnlicensedCarePattern
 from app.domain.models import CareSession, Child, SlotKind, User
 
@@ -22,7 +23,7 @@ def crew_with_families(db, verified_user):
         for i in range(1, n_members):
             u = verified_user(f"가구{i}")
             invite = svc.create_invite(db, crew.id, owner)
-            svc.join_crew(db, u, invite.token)
+            join_via(db, u, invite.token, owner)
             users.append(u)
         for u in users:
             svc.submit_consent(db, crew.id, u, liability_ack=True, photo_consent=True, guardian_consent=True)
@@ -144,6 +145,6 @@ def test_i2_late_joiner_without_consent_blocked(db, crew_with_families, verified
     crew_id, users = build(2)
     late = verified_user("늦게합류")
     invite = svc.create_invite(db, crew_id, users[0])
-    svc.join_crew(db, late, invite.token)  # 합의 없이 합류만
+    join_via(db, late, invite.token, users[0])  # 합의 없이 합류만
     with pytest.raises(ConsentMissing):
         board.add_slot(db, crew_id, late, kind=SlotKind.AVAILABLE, date=DATE, start_hour=14, end_hour=16)

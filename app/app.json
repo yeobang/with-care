@@ -26,7 +26,10 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.yeobang.withcare",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -46,6 +49,11 @@
           "color": "#4FB79A"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8661b200-96c0-4953-ab3e-59c2bfc20cba"
+      }
+    }
   }
 }
