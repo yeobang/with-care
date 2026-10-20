@@ -8,6 +8,8 @@
 - 문서: [docs/00-ideation.md](docs/00-ideation.md)(결정 대장 §17~§25) ·
   [docs/02-guardrails.md](docs/02-guardrails.md)(불변식 I1~I8) · [docs/03-dev-plan.md](docs/03-dev-plan.md)(로드맵)
 
+> **현재 서버는 내려져 있다** (2026-10-20, 비용). 아래 배포 URL은 응답하지 않는다 — 상태는 [AGENTS.md](AGENTS.md).
+
 ## 실행 방법
 
 사전 준비: Python 3.11+ (uv 권장), Node 22+.
@@ -21,7 +23,7 @@ cp .env.example .env          # Supabase URL·키·DB URI 채우기 (Session poo
 .venv/bin/python -m alembic upgrade head
 .venv/bin/python -m uvicorn app.main:app --port 8000
 
-# 2) 테스트 (외부 의존 없음 — SQLite in-memory + 모킹, 86개)
+# 2) 테스트 (외부 의존 없음 — SQLite in-memory + 모킹, 141개)
 .venv/bin/python -m pytest
 
 # 3) 앱 (웹)
