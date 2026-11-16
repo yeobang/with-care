@@ -18,8 +18,10 @@ export default function SitterScreen({ route, navigation }: any) {
   const { crewId } = route.params;
   const [requests, setRequests] = useState<SitterRequest[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
-  const [profile, setProfile] = useState<{ hourly_krw: number } | null>(null);
+  const [profile, setProfile] = useState<{ hourly_krw: number; shared_hourly_krw: number | null } | null>(null);
+  const [myId, setMyId] = useState<string | null>(null);
   const [hourly, setHourly] = useState("");
+  const [sharedHourly, setSharedHourly] = useState("");
   const [date, setDate] = useState(nextMonday());
   const [startH, setStartH] = useState<number | null>(14);
   const [endH, setEndH] = useState<number | null>(17);
@@ -28,7 +30,8 @@ export default function SitterScreen({ route, navigation }: any) {
   const load = useCallback(() => {
     api.get<SitterRequest[]>(`/crews/${crewId}/sitter-requests`).then(setRequests).catch(() => {});
     api.get<Child[]>("/my/children").then(setChildren).catch(() => {});
-    api.get<{ hourly_krw: number } | null>("/sitters/me").then(setProfile).catch(() => {}).finally(() => setLoading(false));
+    api.get<{ id: string }>("/me").then((u) => setMyId(u.id)).catch(() => {});
+    api.get<{ hourly_krw: number; shared_hourly_krw: number | null } | null>("/sitters/me").then(setProfile).catch(() => {}).finally(() => setLoading(false));
   }, [crewId]);
   useFocusEffect(load);
 
@@ -65,7 +68,7 @@ export default function SitterScreen({ route, navigation }: any) {
       <PageHeader title="시터 함께 부르기" sub="여러 집이 나눠서 — 금액은 계산·안내까지" />
       <Text style={ui.sectionTitle}>함께 시터 부르기</Text>
       <Note icon="users">
-        여러 집이 같은 시간대에 함께 부르면 비용을 나눠 낼 수 있어요. 우리 아이 전체로 요청이 올라갑니다.
+        여러 집이 같은 시간대에 함께 부르면 비용을 나눠 낼 수 있어요. 시터비는 아이 수에 비례해 나눠요. 우리 아이 전체로 요청이 올라갑니다.
       </Note>
       <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub, marginBottom: 6 }}>언제가 필요하세요?</Text>
       <DatePicker value={date} onChange={setDate} weekStart={nextMonday()} />
@@ -101,10 +104,16 @@ export default function SitterScreen({ route, navigation }: any) {
           {r.quotes.map((q) => (
             <View key={q.id} style={[ui.card, { marginTop: 8 }]}>
               <Text>
-                총 {q.total_krw.toLocaleString()}원 · 가정당 {q.per_family_krw.toLocaleString()}원
+                총 {q.total_krw.toLocaleString()}원 (시급 {q.hourly_krw.toLocaleString()}원)
                 {q.surge ? " · 긴급 1.5배" : ""} ·{" "}
                 {q.status === "proposed" ? "후보" : q.status === "confirmed" ? "확정" : "거절됨"}
               </Text>
+              {q.families.map((f) => (
+                <Text key={f.guardian_id} style={ui.hint}>
+                  {f.guardian_id === myId ? "우리 집" : "다른 집"} · 아이 {f.child_count}명 ·{" "}
+                  {f.amount_krw.toLocaleString()}원 {f.confirmed ? "✓" : ""}
+                </Text>
+              ))}
               <Text style={ui.hint}>
                 확정 {q.families.filter((f) => f.confirmed).length}/{q.families.length} 가정 — 전 가정 확정 시 세션 성립
               </Text>
@@ -131,23 +140,35 @@ export default function SitterScreen({ route, navigation }: any) {
 
       <Text style={ui.sectionTitle}>시터로 활동하기</Text>
       <Text style={ui.hint}>
-        {profile ? `내 시급: ${profile.hourly_krw.toLocaleString()}원` : "시급을 등록하면 견적을 보낼 수 있어요 (시터 초대로 합류한 크루에서)"}
+        {profile
+          ? `혼자 볼 때 ${profile.hourly_krw.toLocaleString()}원 · 두 집 이상 함께 볼 때 ${(profile.shared_hourly_krw ?? profile.hourly_krw).toLocaleString()}원`
+          : "시급을 등록하면 견적을 보낼 수 있어요 (시터 초대로 합류한 크루에서)"}
       </Text>
       <View style={ui.row}>
         <TextInput
           style={[ui.input, { flex: 1, marginRight: 8 }]}
-          placeholderTextColor={t.sub} placeholder="시급 (원)"
+          placeholderTextColor={t.sub} placeholder="혼자 볼 때 시급"
           keyboardType="number-pad"
           value={hourly}
           onChangeText={setHourly}
+        />
+        <TextInput
+          style={[ui.input, { flex: 1, marginRight: 8 }]}
+          placeholderTextColor={t.sub} placeholder="함께 볼 때 시급 (선택)"
+          keyboardType="number-pad"
+          value={sharedHourly}
+          onChangeText={setSharedHourly}
         />
         <TouchableOpacity
           style={ui.primaryBtn}
           onPress={guard(async () => {
             const v = Number(hourly);
             if (!v || v <= 0) throw new Error("시급을 입력해주세요");
-            await api.post("/sitters/me", { hourly_krw: v });
+            const sv = sharedHourly.trim() === "" ? null : Number(sharedHourly);
+            if (sv !== null && (!sv || sv <= 0)) throw new Error("함께 볼 때 시급은 비우거나 양수로 입력해주세요");
+            await api.post("/sitters/me", { hourly_krw: v, shared_hourly_krw: sv });
             setHourly("");
+            setSharedHourly("");
           })}
         >
           <Text style={ui.primaryBtnText}>시급 저장</Text>

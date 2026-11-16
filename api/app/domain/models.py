@@ -340,6 +340,8 @@ class SitterProfile(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True)
     hourly_krw: Mapped[int] = mapped_column()
+    # §31 S1: 2가정 이상 함께 볼 때 시급. 없으면 hourly_krw를 쓴다
+    shared_hourly_krw: Mapped[int | None] = mapped_column(nullable=True, default=None)
     intro: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
@@ -391,7 +393,8 @@ class SitterQuote(Base):
     hourly_krw: Mapped[int] = mapped_column()   # 제출 시점 프로필 스냅샷
     surge: Mapped[bool] = mapped_column(default=False)  # 당일 요청 1.5배 (§25-3)
     total_krw: Mapped[int] = mapped_column()
-    per_family_krw: Mapped[int] = mapped_column()  # 분할 견적 (절사)
+    # §31 이전의 가정 균등 분할값. 새 견적은 None — 가정별 금액은 SitterQuoteFamily.amount_krw
+    per_family_krw: Mapped[int | None] = mapped_column(nullable=True, default=None)
     status: Mapped[ProposalStatus] = mapped_column(String(10), default=ProposalStatus.PROPOSED)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
@@ -406,6 +409,9 @@ class SitterQuoteFamily(Base):
     quote_id: Mapped[str] = mapped_column(ForeignKey("sitter_quotes.id"))
     guardian_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     confirmed: Mapped[bool] = mapped_column(default=False)
+    # §31 S1: 아이 수 비례 분할 — 견적 제출 시점 스냅샷
+    child_count: Mapped[int] = mapped_column(default=0)
+    amount_krw: Mapped[int] = mapped_column(default=0)
 
 
 # --- P9: 규약 집행 ---

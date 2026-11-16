@@ -126,7 +126,9 @@ def test_full_flow_quote_split_confirm_session(setup, sent):
     req = _make_request(s)  # 3시간, 2가정
     sent.clear()
     quote = client.post(f"/sitter-requests/{req['id']}/quotes", headers=_h(s["sitter"])).json()
-    assert quote["total_krw"] == 30000 and quote["per_family_krw"] == 15000 and quote["surge"] is False
+    assert quote["total_krw"] == 30000 and quote["surge"] is False
+    # §31 S1: 아이 수 비례 — 각 집 아이 1명씩이면 반반
+    assert sorted(f["amount_krw"] for f in quote["families"]) == [15000, 15000]
     assert {m["to"] for m in sent} == {_tok(s["owner"]), _tok(s["mom"])}  # 견적은 가정들에게
 
     # I4: 한 가정 확정만으로는 세션 없음
@@ -239,3 +241,62 @@ def test_join_only_own_child(setup):
         json={"child_id": s["kids"][s["owner"]]}, headers=_h(s["mom"]),
     )
     assert res.status_code == 422
+
+
+# --- §31 S1: 아이 수 비례 분할 + 함께 볼 때 시급 ---
+
+
+def test_split_is_proportional_to_children(setup):
+    """한 집 아이 2명, 다른 집 1명 → 2:1로 나눈다 (가정 균등 아님)."""
+    s, client = setup, setup["client"]
+    second = _child(client, s["owner"])
+    req = client.post(
+        f"/crews/{s['crew_id']}/sitter-requests",
+        json={"date": "2026-09-10", "start_hour": 14, "end_hour": 17,
+              "child_ids": [s["kids"][s["owner"]], second]},
+        headers=_h(s["owner"]),
+    ).json()
+    client.post(f"/sitter-requests/{req['id']}/join", json={"child_id": s["kids"][s["mom"]]}, headers=_h(s["mom"]))
+    quote = client.post(f"/sitter-requests/{req['id']}/quotes", headers=_h(s["sitter"])).json()
+    by = {f["guardian_id"]: f for f in quote["families"]}
+    assert quote["total_krw"] == 30000
+    assert (by[s["owner"]]["child_count"], by[s["owner"]]["amount_krw"]) == (2, 20000)
+    assert (by[s["mom"]]["child_count"], by[s["mom"]]["amount_krw"]) == (1, 10000)
+
+
+def test_shared_rate_applies_only_when_two_or_more_families(setup):
+    s, client = setup, setup["client"]
+    client.post("/sitters/me", json={"hourly_krw": 10000, "shared_hourly_krw": 14000}, headers=_h(s["sitter"]))
+    assert client.get("/sitters/me", headers=_h(s["sitter"])).json()["shared_hourly_krw"] == 14000
+
+    # 한 집만: 혼자 볼 때 시급
+    solo = client.post(
+        f"/crews/{s['crew_id']}/sitter-requests",
+        json={"date": "2026-09-11", "start_hour": 14, "end_hour": 17, "child_ids": [s["kids"][s["owner"]]]},
+        headers=_h(s["owner"]),
+    ).json()
+    q1 = client.post(f"/sitter-requests/{solo['id']}/quotes", headers=_h(s["sitter"])).json()
+    assert (q1["hourly_krw"], q1["total_krw"]) == (10000, 30000)
+
+    # 두 집: 함께 볼 때 시급 → 시터는 더 받고, 각 집은 덜 낸다
+    req = _make_request(s, date="2026-09-12")
+    q2 = client.post(f"/sitter-requests/{req['id']}/quotes", headers=_h(s["sitter"])).json()
+    assert (q2["hourly_krw"], q2["total_krw"]) == (14000, 42000)
+    assert sorted(f["amount_krw"] for f in q2["families"]) == [21000, 21000]
+
+
+def test_split_truncates_per_family_and_never_exceeds_total():
+    """절사 규칙: 합계는 총액을 넘지 않고, 차액은 (가정 수 − 1)원 이하."""
+    from app.domain.sitter_service import split_by_children
+
+    amounts = split_by_children(10000, {"a": 1, "b": 1, "c": 1})
+    assert amounts == {"a": 3333, "b": 3333, "c": 3333}
+    assert 0 <= 10000 - sum(amounts.values()) <= 2
+    with pytest.raises(ValueError):
+        split_by_children(10000, {})
+
+
+def test_profile_rejects_non_positive_shared_rate(setup):
+    s, client = setup, setup["client"]
+    r = client.post("/sitters/me", json={"hourly_krw": 10000, "shared_hourly_krw": 0}, headers=_h(s["sitter"]))
+    assert r.status_code == 422

@@ -170,10 +170,12 @@ def notify_new_quote(db: DbSession, quote: SitterQuote) -> None:
         select(SitterQuoteFamily).where(SitterQuoteFamily.quote_id == quote.id)
     ).all()
     surge = " · 당일 긴급 할증 1.5배" if quote.surge else ""
-    _send_to(
-        db, {f.guardian_id for f in fams}, "시터 견적 도착",
-        f"총 {quote.total_krw:,}원 · 가정당 {quote.per_family_krw:,}원{surge} — 확정 탭은 각 가정이 직접",
-    )
+    for f in fams:  # §31 S1: 아이 수 비례라 가정마다 금액이 다르다 — 각자 자기 몫을 받는다
+        _send_to(
+            db, {f.guardian_id}, "시터 견적 도착",
+            f"총 {quote.total_krw:,}원 · 우리 집 {f.amount_krw:,}원 (아이 {f.child_count}명){surge}"
+            " — 확정 탭은 각 가정이 직접",
+        )
 
 
 def notify_sitter_fallback(db: DbSession, crew_id: str) -> None:

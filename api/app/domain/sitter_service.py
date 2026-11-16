@@ -43,15 +43,24 @@ def _today_kst() -> str:
     return datetime.now(KST).date().isoformat()
 
 
-def upsert_profile(db: DbSession, user: User, *, hourly_krw: int, intro: str = "") -> SitterProfile:
-    """시터 프로필 (이웃→시터 문). 승급 요건 검증(§17-B)은 후속 — 지금은 자기 선언."""
+def upsert_profile(
+    db: DbSession, user: User, *, hourly_krw: int, intro: str = "",
+    shared_hourly_krw: int | None = None,
+) -> SitterProfile:
+    """시터 프로필 (이웃→시터 문). 승급 요건 검증(§17-B)은 후속 — 지금은 자기 선언.
+
+    shared_hourly_krw(§31 S1): 2가정 이상을 함께 볼 때 시급. 비우면 hourly_krw를 그대로 쓴다.
+    """
     if hourly_krw <= 0:
         raise ValueError("시급은 양수여야 한다")
+    if shared_hourly_krw is not None and shared_hourly_krw <= 0:
+        raise ValueError("함께 볼 때 시급은 양수여야 한다")
     profile = db.scalar(select(SitterProfile).where(SitterProfile.user_id == user.id))
     if profile is None:
         profile = SitterProfile(user_id=user.id)
         db.add(profile)
     profile.hourly_krw = hourly_krw
+    profile.shared_hourly_krw = shared_hourly_krw
     profile.intro = intro
     db.flush()
     return profile
@@ -108,17 +117,34 @@ def join_request(db: DbSession, request_id: str, user: User, child_id: str) -> S
     return req
 
 
-def _request_families(db: DbSession, request_id: str) -> set[str]:
+def _request_families(db: DbSession, request_id: str) -> dict[str, int]:
+    """공구 참여 가정 → 그 가정의 참여 아이 수."""
     rows = db.scalars(
         select(SitterRequestChild).where(SitterRequestChild.request_id == request_id)
     ).all()
-    return {db.get(Child, r.child_id).guardian_id for r in rows}
+    counts: dict[str, int] = {}
+    for r in rows:
+        g = db.get(Child, r.child_id).guardian_id
+        counts[g] = counts.get(g, 0) + 1
+    return counts
+
+
+def split_by_children(total_krw: int, child_counts: dict[str, int]) -> dict[str, int]:
+    """§31 S1: 시터비를 아이 수 비례로 나눈다. 가정별 절사(§24-2·§25-3과 같은 규칙).
+
+    절사로 생기는 차액(총액 − 합계)은 최대 (가정 수 − 1)원이며 누구에게도 얹지 않는다.
+    """
+    kids = sum(child_counts.values())
+    if kids <= 0:
+        raise ValueError("참여 아이가 없다")
+    return {g: total_krw * n // kids for g, n in child_counts.items()}
 
 
 def submit_quote(db: DbSession, request_id: str, sitter: User) -> tuple[SitterQuote, bool]:
     """시터의 견적 제출 → (견적, 신규 여부). 같은 요청 재제출은 멱등.
 
-    견적 = 시급 스냅샷 × 시간 × (당일이면 1.5) / 분할 = 총액 ÷ 참여 가정 (절사, §25-3).
+    견적 = 시급 스냅샷 × 시간 × (당일이면 1.5). 시급은 2가정 이상이면 '함께 볼 때 시급'(§31).
+    분할 = 아이 수 비례, 가정별 절사 (§31 S1 — §25-3의 가정 균등을 대체).
     """
     req = db.get(SitterRequest, request_id)
     if req is None:
@@ -140,21 +166,26 @@ def submit_quote(db: DbSession, request_id: str, sitter: User) -> tuple[SitterQu
     if existing is not None:
         return existing, False
 
+    families = _request_families(db, req.id)
+    hourly = profile.hourly_krw
+    if len(families) >= 2 and profile.shared_hourly_krw:
+        hourly = profile.shared_hourly_krw  # §31 S1: 함께 볼 때 시급
     hours = req.end_hour - req.start_hour
     surge = req.date == _today_kst()
-    total = hours * profile.hourly_krw
+    total = hours * hourly
     if surge:
         total = total * SURGE_MULTIPLIER_PCT // 100
-    families = _request_families(db, req.id)
+    amounts = split_by_children(total, families)
     quote = SitterQuote(
         request_id=request_id, sitter_user_id=sitter.id,
-        hourly_krw=profile.hourly_krw, surge=surge,
-        total_krw=total, per_family_krw=total // len(families),
+        hourly_krw=hourly, surge=surge, total_krw=total,
     )
     db.add(quote)
     db.flush()
-    for g in families:
-        db.add(SitterQuoteFamily(quote_id=quote.id, guardian_id=g))
+    for g, n in families.items():
+        db.add(SitterQuoteFamily(
+            quote_id=quote.id, guardian_id=g, child_count=n, amount_krw=amounts[g],
+        ))
     db.flush()
     return quote, True
 

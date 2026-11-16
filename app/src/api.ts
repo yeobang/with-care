@@ -136,6 +136,8 @@ export interface Assignment {
 export interface SitterQuoteFamily {
   guardian_id: string;
   confirmed: boolean;
+  child_count: number;
+  amount_krw: number; // §31 S1: 아이 수 비례 분할
 }
 
 export interface SitterQuote {
@@ -144,7 +146,6 @@ export interface SitterQuote {
   hourly_krw: number;
   surge: boolean;
   total_krw: number;
-  per_family_krw: number;
   status: string;
   families: SitterQuoteFamily[];
 }

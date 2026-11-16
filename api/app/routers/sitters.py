@@ -23,19 +23,27 @@ router = APIRouter(tags=["sitters"])
 
 class ProfileIn(BaseModel):
     hourly_krw: int = Field(gt=0, le=1_000_000)
+    shared_hourly_krw: int | None = Field(default=None, gt=0, le=1_000_000)
     intro: str = Field(default="", max_length=500)
 
 
 @router.post("/sitters/me")
 def upsert_profile(body: ProfileIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    p = svc.upsert_profile(db, user, hourly_krw=body.hourly_krw, intro=body.intro)
-    return {"hourly_krw": p.hourly_krw, "intro": p.intro}
+    p = svc.upsert_profile(
+        db, user, hourly_krw=body.hourly_krw, intro=body.intro,
+        shared_hourly_krw=body.shared_hourly_krw,
+    )
+    return _profile_out(p)
 
 
 @router.get("/sitters/me")
 def my_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     p = db.scalar(select(SitterProfile).where(SitterProfile.user_id == user.id))
-    return {"hourly_krw": p.hourly_krw, "intro": p.intro} if p else None
+    return _profile_out(p) if p else None
+
+
+def _profile_out(p: SitterProfile) -> dict:
+    return {"hourly_krw": p.hourly_krw, "shared_hourly_krw": p.shared_hourly_krw, "intro": p.intro}
 
 
 class RequestIn(BaseModel):
@@ -106,10 +114,15 @@ def _quote_out(db: Session, q: SitterQuote) -> dict:
         "hourly_krw": q.hourly_krw,
         "surge": q.surge,
         "total_krw": q.total_krw,
-        "per_family_krw": q.per_family_krw,
         "status": str(q.status),
         "families": [
-            {"guardian_id": f.guardian_id, "confirmed": f.confirmed} for f in fams
+            {
+                "guardian_id": f.guardian_id,
+                "confirmed": f.confirmed,
+                "child_count": f.child_count,
+                "amount_krw": f.amount_krw,
+            }
+            for f in fams
         ],
     }
 
