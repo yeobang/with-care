@@ -151,6 +151,9 @@ export interface SitterQuote {
 }
 
 export interface SitterRequest {
+  weekdays: number[] | null;
+  occurrence_dates: string[];
+  schedule_id: string | null;
   id: string;
   date: string;
   start_hour: number;

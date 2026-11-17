@@ -22,6 +22,8 @@ export default function SitterScreen({ route, navigation }: any) {
   const [myId, setMyId] = useState<string | null>(null);
   const [hourly, setHourly] = useState("");
   const [sharedHourly, setSharedHourly] = useState("");
+  const [recurring, setRecurring] = useState(false);
+  const [weekdays, setWeekdays] = useState<number[]>([0, 2, 4]);
   const [date, setDate] = useState(nextMonday());
   const [startH, setStartH] = useState<number | null>(14);
   const [endH, setEndH] = useState<number | null>(17);
@@ -49,6 +51,7 @@ export default function SitterScreen({ route, navigation }: any) {
     if (children.length === 0) throw new Error("먼저 홈에서 아이를 등록해주세요");
     await api.post(`/crews/${crewId}/sitter-requests`, {
       date,
+      weekdays: recurring ? weekdays : null,
       start_hour: startH,
       end_hour: endH,
       child_ids: children.map((c) => c.id),
@@ -71,6 +74,22 @@ export default function SitterScreen({ route, navigation }: any) {
         여러 집이 같은 시간대에 함께 부르면 비용을 나눠 낼 수 있어요. 시터비는 아이 수에 비례해 나눠요. 우리 아이 전체로 요청이 올라갑니다.
       </Note>
       <Text style={{ fontSize: 13, fontWeight: "700", color: t.sub, marginBottom: 6 }}>언제가 필요하세요?</Text>
+      <View style={ui.row}>
+        <Btn label={recurring ? "✓ 매주 반복 (4주)" : "1회 일정 · 매주 반복으로 바꾸기"} onPress={() => setRecurring(!recurring)} />
+      </View>
+      {recurring && <>
+        <View style={ui.row}>
+          {["월", "화", "수", "목", "금", "토", "일"].map((day, i) => (
+            <TouchableOpacity key={day} style={ui.smallBtn} onPress={() => setWeekdays(
+              weekdays.includes(i) ? weekdays.filter((d) => d !== i) : [...weekdays, i].sort()
+            )}>
+              <Text style={ui.smallBtnText}>{weekdays.includes(i) ? "✓ " : ""}{day}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={ui.hint}>아래 시작일부터 4주간 반복해요. 모든 가정이 시터와 회당 금액을 확정해야 세션이 생겨요.</Text>
+        <Note icon="users">정기 돌봄은 자격·등록 통로를 검토해주세요. 일정 변경은 새 제안으로, 확정 후 취소는 세션별로 진행해요. 4주 뒤 자동 연장은 없어요.</Note>
+      </>}
       <DatePicker value={date} onChange={setDate} weekStart={nextMonday()} />
       <View style={{ height: 14 }} />
       <HourRangePicker start={startH} end={endH} onChange={(a, b) => { setStartH(a); setEndH(b); }} />
@@ -88,6 +107,14 @@ export default function SitterScreen({ route, navigation }: any) {
             {r.date} {r.start_hour}시~{r.end_hour}시 · 아이 {r.child_count} ·{" "}
             {r.status === "open" ? "견적 받는 중" : r.status === "matched" ? "매칭됨" : "종료"}
           </Text>
+          {r.weekdays && (
+            <Text style={ui.hint}>
+              매주 {r.weekdays.map((d) => ["월", "화", "수", "목", "금", "토", "일"][d]).join("·")} ·
+              {r.occurrence_dates[0]} ~ {r.occurrence_dates[r.occurrence_dates.length - 1]} · 총 {r.occurrence_dates.length}회
+              {"\n"}회당 금액을 확인하고 4주 일정 전체를 확정해주세요.
+            </Text>
+          )}
+          {r.schedule_id && <Text style={ui.hint}>정기 일정의 개별 회차</Text>}
           {r.status === "open" && (
             <View style={ui.row}>
               <TouchableOpacity style={ui.smallBtn} onPress={() => joinAll(r.id)}>
@@ -104,7 +131,7 @@ export default function SitterScreen({ route, navigation }: any) {
           {r.quotes.map((q) => (
             <View key={q.id} style={[ui.card, { marginTop: 8 }]}>
               <Text>
-                총 {q.total_krw.toLocaleString()}원 (시급 {q.hourly_krw.toLocaleString()}원)
+                {r.weekdays ? "회당 " : "총 "}{q.total_krw.toLocaleString()}원 (시급 {q.hourly_krw.toLocaleString()}원)
                 {q.surge ? " · 긴급 1.5배" : ""} ·{" "}
                 {q.status === "proposed" ? "후보" : q.status === "confirmed" ? "확정" : "거절됨"}
               </Text>
@@ -123,7 +150,7 @@ export default function SitterScreen({ route, navigation }: any) {
                     style={ui.smallBtn}
                     onPress={guard(() => api.post(`/sitter-quotes/${q.id}/confirm`))}
                   >
-                    <Text style={ui.smallBtnText}>내 가정 확정 탭</Text>
+                    <Text style={ui.smallBtnText}>{r.weekdays ? "내 가정 4주 일정 확정" : "내 가정 확정 탭"}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={ui.smallBtn}

@@ -51,6 +51,7 @@ class RequestIn(BaseModel):
     start_hour: int = Field(ge=0, le=23)
     end_hour: int = Field(ge=1, le=24)
     child_ids: list[str] = Field(min_length=1)
+    weekdays: list[int] | None = None
 
 
 @router.post("/crews/{crew_id}/sitter-requests")
@@ -91,11 +92,14 @@ def confirm_quote(quote_id: str, user: User = Depends(get_current_user), db: Ses
     quote = db.get(SitterQuote, quote_id)
     was_confirmed = quote is not None and str(quote.status) == "confirmed"
     session = svc.confirm_quote(db, quote_id, user)
-    if session is not None and not was_confirmed:
-        notifications.notify_session_confirmed(db, session)
-        if svc.recurrence_warning(db, session):
-            notifications.notify_recurrence(db, session.crew_id)  # §25-6: 경고, 차단 아님
-    return {"session_id": session.id if session else None}
+    req = db.get(SitterRequest, quote.request_id)
+    sessions = svc.schedule_sessions(db, req.id) if req.weekdays and session else ([session] if session else [])
+    if not was_confirmed:
+        for item in sessions:
+            notifications.notify_session_confirmed(db, item)
+        if any(svc.recurrence_warning(db, item) for item in sessions):
+            notifications.notify_recurrence(db, req.crew_id)  # §25-6: 경고, 차단 아님
+    return {"session_id": session.id if session else None, "session_ids": [s.id for s in sessions]}
 
 
 @router.post("/sitter-quotes/{quote_id}/decline")
@@ -137,6 +141,9 @@ def _request_out(db: Session, r: SitterRequest) -> dict:
     return {
         "id": r.id,
         "date": r.date,
+        "weekdays": [int(d) for d in r.weekdays.split(",")] if r.weekdays else None,
+        "occurrence_dates": svc.schedule_dates(r),
+        "schedule_id": r.schedule_id,
         "start_hour": r.start_hour,
         "end_hour": r.end_hour,
         "status": str(r.status),

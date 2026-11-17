@@ -6,7 +6,7 @@ I3: 세션 성립 직전 영유아 5인 가드 동일 적용. 상시성(§25-6)�
 """
 
 from datetime import date as date_type
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -68,7 +68,7 @@ def upsert_profile(
 
 def create_request(
     db: DbSession, crew_id: str, user: User, *, date: str, start_hour: int, end_hour: int,
-    child_ids: list[str],
+    child_ids: list[str], weekdays: list[int] | None = None,
 ) -> SitterRequest:
     _require_parent(db, crew_id, user.id)
     _require_active(db, crew_id)
@@ -81,7 +81,13 @@ def create_request(
         child = db.get(Child, cid)
         if child is None or child.guardian_id != user.id:
             raise ValueError("자기 아이로만 공구에 참여할 수 있다")
+    if weekdays is not None:
+        if not weekdays or any(type(day) is not int or day not in range(7) for day in weekdays):
+            raise ValueError("요일은 월(0)부터 일(6) 중 하나 이상 선택해야 한다")
+        if date_type.fromisoformat(date) <= date_type.fromisoformat(_today_kst()):
+            raise ValueError("정기 일정은 내일 이후 시작해야 한다")
     req = SitterRequest(
+        weekdays=",".join(str(d) for d in sorted(set(weekdays))) if weekdays is not None else None,
         crew_id=crew_id, created_by=user.id, date=date,
         start_hour=start_hour, end_hour=end_hour,
     )
@@ -95,7 +101,7 @@ def create_request(
 
 def join_request(db: DbSession, request_id: str, user: User, child_id: str) -> SitterRequest:
     """다른 가정의 공구 참여 — 자기 아이로만. 재참여 멱등."""
-    req = db.get(SitterRequest, request_id)
+    req = _locked_request(db, request_id)
     if req is None:
         raise ValueError("존재하지 않는 공구 요청")
     _require_parent(db, req.crew_id, user.id)
@@ -112,6 +118,8 @@ def join_request(db: DbSession, request_id: str, user: User, child_id: str) -> S
         )
     )
     if existing is None:
+        if req.weekdays and db.scalar(select(SitterQuote.id).where(SitterQuote.request_id == req.id)):
+            raise errors.HumanChoiceViolation("정기 견적 제출 후에는 참여 아이를 바꿀 수 없다 (I4)")
         db.add(SitterRequestChild(request_id=request_id, child_id=child_id))
         db.flush()
     return req
@@ -146,7 +154,7 @@ def submit_quote(db: DbSession, request_id: str, sitter: User) -> tuple[SitterQu
     견적 = 시급 스냅샷 × 시간 × (당일이면 1.5). 시급은 2가정 이상이면 '함께 볼 때 시급'(§31).
     분할 = 아이 수 비례, 가정별 절사 (§31 S1 — §25-3의 가정 균등을 대체).
     """
-    req = db.get(SitterRequest, request_id)
+    req = _locked_request(db, request_id)
     if req is None:
         raise ValueError("존재하지 않는 공구 요청")
     member = _require_member(db, req.crew_id, sitter.id)
@@ -171,7 +179,7 @@ def submit_quote(db: DbSession, request_id: str, sitter: User) -> tuple[SitterQu
     if len(families) >= 2 and profile.shared_hourly_krw:
         hourly = profile.shared_hourly_krw  # §31 S1: 함께 볼 때 시급
     hours = req.end_hour - req.start_hour
-    surge = req.date == _today_kst()
+    surge = not req.weekdays and req.date == _today_kst()
     total = hours * hourly
     if surge:
         total = total * SURGE_MULTIPLIER_PCT // 100
@@ -195,9 +203,12 @@ def confirm_quote(db: DbSession, quote_id: str, guardian: User) -> CareSession |
     quote = db.get(SitterQuote, quote_id)
     if quote is None:
         raise ValueError("존재하지 않는 견적")
-    req = db.get(SitterRequest, quote.request_id)
+    req = _locked_request(db, quote.request_id)
+    db.refresh(quote)
     _require_parent(db, req.crew_id, guardian.id)
     _require_consent(db, req.crew_id, guardian.id)
+    if req.weekdays:
+        return _confirm_schedule(db, req, quote, guardian)
     if quote.status == ProposalStatus.CONFIRMED:
         return db.scalar(select(CareSession).where(CareSession.sitter_quote_id == quote.id))
     if quote.status == ProposalStatus.DECLINED:
@@ -234,7 +245,8 @@ def decline_quote(db: DbSession, quote_id: str, user: User) -> SitterQuote:
     quote = db.get(SitterQuote, quote_id)
     if quote is None:
         raise ValueError("존재하지 않는 견적")
-    req = db.get(SitterRequest, quote.request_id)
+    req = _locked_request(db, quote.request_id)
+    db.refresh(quote)
     _require_member(db, req.crew_id, user.id)
     if quote.status == ProposalStatus.DECLINED:
         return quote
@@ -288,7 +300,92 @@ def reopen_after_cancel(db: DbSession, session: CareSession) -> None:
     if session.sitter_quote_id is None:
         return
     quote = db.get(SitterQuote, session.sitter_quote_id)
-    req = db.get(SitterRequest, quote.request_id)
+    req = _locked_request(db, quote.request_id)
     quote.status = ProposalStatus.DECLINED
     req.status = SitterRequestStatus.OPEN
     db.flush()
+
+
+def _locked_request(db: DbSession, request_id: str) -> SitterRequest | None:
+    # 참여·견적·확정이 같은 요청 행을 잠근다. 서로 다른 후보의 동시 확정도 직렬화한다.
+    return db.scalar(select(SitterRequest).where(SitterRequest.id == request_id)
+                     .with_for_update().execution_options(populate_existing=True))
+
+
+def schedule_dates(req: SitterRequest) -> list[str]:
+    if not req.weekdays:
+        return []
+    start = date_type.fromisoformat(req.date)
+    weekdays = {int(d) for d in req.weekdays.split(",")}
+    return [(start + timedelta(days=n)).isoformat() for n in range(28)
+            if (start + timedelta(days=n)).weekday() in weekdays]
+
+
+def schedule_sessions(db: DbSession, request_id: str) -> list[CareSession]:
+    return list(db.scalars(
+        select(CareSession).join(SitterQuote, CareSession.sitter_quote_id == SitterQuote.id)
+        .join(SitterRequest, SitterQuote.request_id == SitterRequest.id)
+        .where(SitterRequest.schedule_id == request_id).order_by(CareSession.date)
+    ).all())
+
+
+def _confirm_schedule(
+    db: DbSession, req: SitterRequest, quote: SitterQuote, guardian: User,
+) -> CareSession | None:
+    fams = db.scalars(select(SitterQuoteFamily).where(SitterQuoteFamily.quote_id == quote.id)).all()
+    mine = next((f for f in fams if f.guardian_id == guardian.id), None)
+    if mine is None:
+        raise errors.HumanChoiceViolation("자기 가정의 일정만 확정할 수 있다 (I4)")
+    if quote.status == ProposalStatus.CONFIRMED:
+        return schedule_sessions(db, req.id)[0]
+    if quote.status != ProposalStatus.PROPOSED or req.status != SitterRequestStatus.OPEN:
+        raise ValueError("종료된 일정 또는 견적은 확정할 수 없다")
+    if req.date <= _today_kst():
+        raise ValueError("정기 일정 시작일이 지났다. 새 일정을 제안해야 한다")
+    _require_active(db, req.crew_id)
+    mine.confirmed = True
+    db.flush()
+    if not all(f.confirmed for f in fams):
+        return None
+    # 마지막 탭 시에도 모든 참여자의 현재 멤버십·합의를 검증한다.
+    for f in fams:
+        _require_parent(db, req.crew_id, f.guardian_id)
+        _require_consent(db, req.crew_id, f.guardian_id)
+    sitter = _require_member(db, req.crew_id, quote.sitter_user_id)
+    if sitter.role != MemberRole.SITTER:
+        raise errors.CrewIsolationViolation("시터 역할 멤버만 돌볼 수 있다")
+    _require_consent(db, req.crew_id, quote.sitter_user_id)
+    children = db.scalars(select(SitterRequestChild).where(SitterRequestChild.request_id == req.id)).all()
+    amounts = split_by_children(quote.total_krw, {f.guardian_id: f.child_count for f in fams})
+    for day in schedule_dates(req):
+        occurrence = SitterRequest(
+            crew_id=req.crew_id, created_by=req.created_by, date=day,
+            start_hour=req.start_hour, end_hour=req.end_hour,
+            schedule_id=req.id, status=SitterRequestStatus.MATCHED,
+        )
+        db.add(occurrence)
+        db.flush()
+        db.add_all([SitterRequestChild(request_id=occurrence.id, child_id=c.child_id) for c in children])
+        db.flush()
+        _guard_i3(db, occurrence, quote.sitter_user_id)
+        occurrence_quote = SitterQuote(
+            request_id=occurrence.id, sitter_user_id=quote.sitter_user_id,
+            hourly_krw=quote.hourly_krw, surge=False, total_krw=quote.total_krw,
+            status=ProposalStatus.CONFIRMED,
+        )
+        db.add(occurrence_quote)
+        db.flush()
+        # 일정에 대한 명시적 동의를 회차에 상속한다. 개별 자동 선택이 아니다.
+        db.add_all([SitterQuoteFamily(
+            quote_id=occurrence_quote.id, guardian_id=f.guardian_id, confirmed=True,
+            child_count=f.child_count, amount_krw=amounts[f.guardian_id],
+        ) for f in fams])
+        db.add(CareSession(
+            crew_id=req.crew_id, sitter_quote_id=occurrence_quote.id,
+            caregiver_id=quote.sitter_user_id, date=day,
+            start_hour=req.start_hour, end_hour=req.end_hour,
+        ))
+    quote.status = ProposalStatus.CONFIRMED
+    req.status = SitterRequestStatus.MATCHED
+    db.flush()
+    return schedule_sessions(db, req.id)[0]

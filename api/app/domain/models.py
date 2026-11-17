@@ -357,6 +357,11 @@ class SitterRequest(Base):
 
     __tablename__ = "sitter_requests"
 
+    # 정기 원본은 요일(월=0)을 저장하고 회차 요청은 원본을 참조한다.
+    weekdays: Mapped[str | None] = mapped_column(String(13), default=None)
+    schedule_id: Mapped[str | None] = mapped_column(ForeignKey("sitter_requests.id"), default=None)
+    __table_args__ = (UniqueConstraint("schedule_id", "date", name="uq_sitter_schedule_date"),)
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     crew_id: Mapped[str] = mapped_column(ForeignKey("crews.id"))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
